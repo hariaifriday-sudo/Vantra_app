@@ -9,7 +9,7 @@ const columns: { title: string; links: { label: string; to?: string }[] }[] = [
 
 export function PublicFooter() {
   return (
-    <footer className="mx-auto mt-8 w-full max-w-6xl rounded-3xl border border-border-hair bg-surface p-10">
+    <footer className="relative mx-auto mt-8 w-full max-w-6xl overflow-hidden rounded-3xl border border-border-hair bg-surface p-10 pb-0">
       <div className="flex flex-col justify-between gap-10 sm:flex-row">
         <div>
           <VantraLogo className="text-ink" />
@@ -43,6 +43,9 @@ export function PublicFooter() {
       <div className="mt-10 flex flex-col gap-2 border-t border-border-hair pt-6 text-xs text-ink-muted sm:flex-row sm:items-center sm:justify-between">
         <p>© 2026 Vantra Bank. Member FDIC (simulated). Equal Housing Lender.</p>
         <p>Deposits and lending products shown are illustrative, not live offers.</p>
+      </div>
+      <div className="pointer-events-none mt-6 flex justify-center overflow-hidden" aria-hidden="true">
+        <span className="select-none font-display text-[13vw] font-black leading-none tracking-tight text-ink/[0.04]">VANTRA</span>
       </div>
     </footer>
   )

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Bell, ChatCircleDots, X } from '@phosphor-icons/react'
 import { AccountSidebar } from './AccountSidebar'
 import { UserMenu } from './UserMenu'
@@ -12,6 +13,7 @@ export function AccountLayout() {
   const [unreadCount, setUnreadCount] = useState(0)
   const { user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const firstName = user?.fullName.split(' ')[0] ?? 'there'
 
   useEffect(() => {
@@ -53,7 +55,17 @@ export function AccountLayout() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-          <Outlet />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
 

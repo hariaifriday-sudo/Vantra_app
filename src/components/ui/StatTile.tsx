@@ -22,7 +22,7 @@ const tints: Record<string, string> = {
 
 export function StatTile({ label, value, delta, tint = 'none', period, action, className }: StatTileProps) {
   return (
-    <Card className={cn('relative overflow-hidden p-5', tints[tint], className)}>
+    <Card className={cn('group relative overflow-hidden p-5', tints[tint], className)}>
       <div className="flex items-start justify-between">
         <span className="text-sm font-medium text-ink-muted">{label}</span>
         {period ? (

@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import {
   SquaresFour,
   IdentificationCard,
@@ -36,15 +37,21 @@ export function AgentSidebar() {
             key={item.to}
             to={item.to}
             end={item.end}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-ink-muted transition-colors',
-                isActive ? 'bg-surface-2 text-ink' : 'hover:bg-surface-2/60 hover:text-ink',
-              )
-            }
+            className="relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink"
           >
-            <item.icon size={18} />
-            {item.label}
+            {({ isActive }) => (
+              <>
+                {isActive ? (
+                  <motion.span
+                    layoutId="agent-nav-active"
+                    className="absolute inset-0 rounded-xl bg-surface-2"
+                    transition={{ type: 'spring', stiffness: 500, damping: 34 }}
+                  />
+                ) : null}
+                <item.icon size={18} className={cn('relative z-10', isActive && 'text-ink')} />
+                <span className={cn('relative z-10', isActive && 'text-ink')}>{item.label}</span>
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
