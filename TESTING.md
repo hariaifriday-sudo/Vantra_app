@@ -65,7 +65,7 @@ If you want a completely clean slate at any point: stop the backend, delete `ser
 
 ### 2.2 KYC Automation — `/app/kyc`
 This is the flagship flow — real OCR, real LLM, real signature.
-1. Click the dropzone and upload a **clear photo of any ID-like document** (a driver's license, or even a printed page with "Name: ___, Date of Birth: ___, Address: ___" works — Tesseract just needs legible text). JPG/PNG/WEBP only.
+1. Click the dropzone and upload a **clear photo of any ID-like document** (a driver's license, or even a printed page with "Name: ___, Date of Birth: ___, Address: ___" works — Tesseract just needs legible text). JPG/PNG/WEBP only. No document handy? Use the bundled fixture: `server/tests/fixtures/sample_id.png` (synthetic, not a real person — see [server/tests/fixtures/README.md](server/tests/fixtures/README.md)).
 2. Wait for "Scanning document with OCR…" to finish (a few seconds).
 3. **AI Review step**: confirm extracted fields appear with confidence badges (High/Medium/Low). Edit any field, then click **Looks good, continue**.
 4. **Confirm & Sign step**: check the authorization box, draw a signature in the pad (click-drag with mouse), click **Submit for Review**.
@@ -124,7 +124,7 @@ This is the second flagship flow.
 7. Try the **Escalate** and **Clear** buttons on a different alert; add an analyst note first and confirm it's saved (reopen the alert to check).
 
 ### 3.5 Document Processing — `/agent/documents`
-- Upload any legible document image (loan form, invoice, anything with text).
+- Upload any legible document image (loan form, invoice, anything with text) — `server/tests/fixtures/sample_id.png` works fine here too.
 - Confirm extracted fields appear grouped (Applicant / Financials / Collateral) with confidence badges.
 - In **Account Linking**, type a name fragment (try "Priya" or "Coastal") — confirm matching account holders/entities appear with a match score, and **Link to Account** toggles to "Linked."
 
@@ -175,6 +175,11 @@ curl -s http://localhost:8000/api/accounts/insights -H "Authorization: Bearer $T
 
 # Cash-flow forecast
 curl -s http://localhost:8000/api/accounts/forecast -H "Authorization: Bearer $TOKEN"
+
+# OCR + LLM document extraction, using the bundled sample fixture
+curl -s -X POST "http://localhost:8000/api/documents/extract?kind=kyc" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@server/tests/fixtures/sample_id.png;type=image/png"
 ```
 
 ```bash
