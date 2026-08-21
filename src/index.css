@@ -1,0 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+@theme inline {
+  --font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-border-hair: var(--border-hair);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-lavender: var(--lavender);
+  --color-sky: var(--sky);
+  --color-mint: var(--mint);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-watch: var(--watch);
+
+  --shadow-soft: 0 1px 2px rgba(20, 20, 20, 0.04), 0 8px 24px -12px rgba(20, 20, 20, 0.10);
+  --shadow-lift: 0 4px 10px rgba(20, 20, 20, 0.06), 0 20px 40px -16px rgba(20, 20, 20, 0.16);
+}
+
+:root {
+  /* Mode A — Public site + Account Holder Portal (light) */
+  --paper: #fafaf9;
+  --surface: #ffffff;
+  --surface-2: #f4f2ee;
+  --ink: #141414;
+  --ink-muted: #6b6b6b;
+  --border-hair: rgba(20, 20, 20, 0.09);
+  --accent: #e8b23d;
+  --accent-ink: #1a1206;
+  --lavender: #c9c2f0;
+  --sky: #bfe3f5;
+  --mint: #c7efd8;
+  --positive: #1f9d63;
+  --negative: #d64545;
+  --watch: #c98a1c;
+}
+
+/* Mode B — Agent Portal (dark ops). Applied via .agent-mode wrapper. */
+.agent-mode {
+  --paper: #0b0d10;
+  --surface: #14171c;
+  --surface-2: #191d24;
+  --ink: #f2f3f5;
+  --ink-muted: #9aa0aa;
+  --border-hair: rgba(255, 255, 255, 0.08);
+  --accent: #2fd4c4;
+  --accent-ink: #04211d;
+  --positive: #34d399;
+  --negative: #fb7185;
+  --watch: #f0b959;
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  --shadow-lift: 0 4px 10px rgba(0, 0, 0, 0.35), 0 24px 48px -16px rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* AI-accent gradient orb — the assistant's visual signature everywhere it appears */
+.ai-orb {
+  background: conic-gradient(from 180deg, #ec4899, #8b5cf6, #2fd4c4, #ec4899);
+  filter: saturate(1.1);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vantra Executive Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0d10; --surface:#14171c; --surface-2:#191d24; --surface-3:#1f242c;
+    --ink:#f2f3f5; --ink-muted:#9aa0aa; --ink-faint:#5c626d;
+    --border:rgba(255,255,255,.09); --border-strong:rgba(255,255,255,.16);
+    --amber:#e8b23d; --amber-ink:#1a1206; --teal:#2fd4c4;
+    --positive:#34d399; --negative:#fb7185; --watch:#f0b959; --violet:#8b5cf6; --pink:#ec4899;
+    --font-display:'Plus Jakarta Sans',system-ui,sans-serif;
+    --font-body:'Inter',system-ui,sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:var(--bg);color:var(--ink)}
+  body{font-family:var(--font-body);-webkit-font-smoothing:antialiased;overflow:hidden}
+  ::selection{background:var(--amber);color:var(--amber-ink)}
+
+  .deck{position:relative;width:100vw;height:100vh;overflow:hidden}
+  @media (min-width:769px){
+    .deck{max-width:calc(100vh * 16 / 9);max-height:calc(100vw * 9 / 16);margin:auto;position:absolute;inset:0}
+  }
+  .slide{
+    position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-start;
+    padding:clamp(28px,4.4vw,64px) clamp(36px,6vw,88px);
+    opacity:0;visibility:hidden;transition:opacity .35s ease;
+    background:
+      radial-gradient(1100px 480px at 82% -8%, rgba(47,212,196,.10), transparent 60%),
+      radial-gradient(900px 420px at -6% 108%, rgba(232,178,61,.08), transparent 55%),
+      var(--bg);
+  }
+  .slide.active{opacity:1;visibility:visible}
+
+  .kicker{display:flex;align-items:center;justify-content:space-between;margin-bottom:clamp(14px,2.4vw,26px)}
+  .brand{display:flex;align-items:center;gap:9px;font-family:var(--font-display);font-weight:700;font-size:14px;color:var(--ink-muted)}
+  .brand svg{width:16px;height:16px}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal)}
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--teal)}
+  .slide-no{font-family:var(--font-mono);font-size:11px;color:var(--ink-faint)}
+
+  h1.title{font-family:var(--font-display);font-weight:800;font-size:clamp(30px,3.6vw,50px);line-height:1.08;letter-spacing:-.01em;margin:8px 0 10px}
+  h2.subtitle{font-family:var(--font-body);font-weight:400;font-size:clamp(14px,1.5vw,18px);color:var(--ink-muted);max-width:62ch;line-height:1.55}
+  .body-copy{max-width:1200px;flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center}
+
+  /* ---- generic components ---- */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:20px}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 11px;font-size:11.5px;font-weight:600;font-family:var(--font-mono)}
+  .pill-amber{background:rgba(232,178,61,.15);color:var(--amber)}
+  .pill-teal{background:rgba(47,212,196,.14);color:var(--teal)}
+  .pill-pos{background:rgba(52,211,153,.14);color:var(--positive)}
+  .pill-neg{background:rgba(251,113,133,.14);color:var(--negative)}
+  .pill-watch{background:rgba(240,185,89,.14);color:var(--watch)}
+  .pill-muted{background:var(--surface-3);color:var(--ink-muted)}
+
+  .orb{border-radius:50%;background:conic-gradient(from 180deg,var(--pink),var(--violet),var(--teal),var(--pink));flex-shrink:0}
+
+  .mock{border:1px solid var(--border-strong);border-radius:18px;background:var(--surface-2);overflow:hidden;box-shadow:0 30px 60px -30px rgba(0,0,0,.6)}
+  .mock-bar{display:flex;align-items:center;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border)}
+  .mock-bar span{width:8px;height:8px;border-radius:50%;background:var(--border-strong)}
+  .mock-body{padding:18px}
+
+  .stat-num{font-family:var(--font-display);font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+
+  figure.diagram{margin:0;flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center}
+  figure.diagram svg{width:100%;height:auto;color:var(--ink-muted)}
+  figure.diagram figcaption{margin-top:10px;font-size:12.5px;color:var(--ink-faint);text-align:center}
+  .arch-box-label{font-family:var(--font-body);font-size:13px;fill:var(--ink);font-weight:600}
+  .arch-box-sub{font-family:var(--font-body);font-size:10.5px;fill:var(--ink-muted)}
+  .arch-arrow-label{font-family:var(--font-mono);font-size:10px;fill:var(--ink-faint)}
+
+  ul.check{list-style:none;display:flex;flex-direction:column;gap:11px}
+  ul.check li{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--ink-muted);line-height:1.5}
+  ul.check li svg{flex-shrink:0;margin-top:2px}
+
+  /* ---- nav ---- */
+  .progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--amber),var(--teal));transition:width .3s;z-index:1000}
+  .navctl{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:16px;z-index:1000;
+    background:rgba(20,23,28,.75);backdrop-filter:blur(8px);border:1px solid var(--border);padding:7px 10px;border-radius:999px}
+  .navbtn{background:transparent;border:none;color:var(--ink);width:30px;height:30px;border-radius:50%;cursor:pointer;display:grid;place-items:center;transition:background .15s}
+  .navbtn:hover{background:rgba(255,255,255,.08)}
+  .navcount{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-muted);min-width:44px;text-align:center}
+
+  @media (max-width:768px){
+    .grid-2,.grid-3{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+<div class="deck" id="deck">
+
+  <!-- 1: TITLE -->
+  <section class="slide active">
+    <div style="flex:1;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:22px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="var(--amber)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span style="font-family:var(--font-display);font-weight:800;font-size:22px">Vantra</span>
+      </div>
+      <div class="eyebrow"><span class="dot"></span>Executive Architecture &amp; Feature Review</div>
+      <h1 class="title" style="font-size:clamp(38px,5.6vw,72px);max-width:16ch">An AI-native bank, built for two audiences.</h1>
+      <h2 class="subtitle" style="max-width:56ch">One platform that helps customers serve themselves and helps compliance, fraud, and credit teams work faster — with a human decision at the end of every AI-assisted step.</h2>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <span class="pill pill-amber">Account Holder App</span>
+        <span class="pill pill-teal">Agent Ops Console</span>
+        <span class="pill pill-muted">Public Site &amp; Assistant</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2: EXECUTIVE SUMMARY -->
+  <section class="slide">
+    <div class="kicker"><div class="brand"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vantra</div><div class="slide-no">02 / 16</div></div>
+    <div class="eyebrow"><span class="dot"></span>Executive Summary</div>
+    <h1 class="title">What we built, in one sentence.</h1>
+    <h2 class="subtitle">A working bank simulation where AI drafts, and people decide — end to end, from a customer's first question to a compliance officer's final sign-off.</h2>
+    <div class="body-copy">
+      <div class="grid-3">
+        <div class="card">
+          <span class="pill pill-amber">For customers</span>
+          <p style="margin-top:12px;font-size:14.5px;color:var(--ink-muted);line-height:1.6">Instant answers day or night, identity verification in minutes instead of days, and a direct line to dispute anything the system flags.</p>
+        </div>
+        <div class="card">
+          <span class="pill pill-teal">For the bank</span>
+          <p style="margin-top:12px;font-size:14.5px;color:var(--ink-muted);line-height:1.6">Agents get AI-drafted recommendations — risk summaries, fraud narratives, SAR drafts — so they review and decide instead of writing from scratch.</p>
+        </div>
+        <div class="card">
+          <span class="pill pill-pos">For compliance</span>
+          <p style="margin-top:12px;font-size:14.5px;color:var(--ink-muted);line-height:1.6">Every AI output is logged next to the human decision that followed it. Nothing is approved, rejected, or filed by AI alone.</p>
+        </div>
+      </div>
+      <div class="grid-3" style="margin-top:18px">
+        <div class="card" style="text-align:center">
+          <div class="stat-num" style="font-size:34px;color:var(--amber)">10</div>
+          <div style="font-size:12px;color:var(--ink-muted);margin-top:4px">AI-assisted workflows, live end-to-end</div>
+        </div>
+        <div class="card" style="text-align:center">
+          <div class="stat-num" style="font-size:34px;color:var(--teal)">2</div>
+          <div style="font-size:12px;color:var(--ink-muted);margin-top:4px">Purpose-built portals on one codebase</div>
+        </div>
+        <div class="card" style="text-align:center">
+          <div class="stat-num" style="font-size:34px;color:var(--positive)">100%</div>
+          <div style="font-size:12px;color:var(--ink-muted);margin-top:4px">Of approvals, rejections &amp; filings made by a human</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3: ARCHITECTURE OVERVIEW -->
+  <section class="slide">
+    <div class="kicker"><div class="brand"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vantra</div><div class="slide-no">03 / 16</div></div>
+    <div class="eyebrow"><span class="dot"></span>Architecture</div>
+    <h1 class="title">How it's put together.</h1>
+    <h2 class="subtitle">Three front doors, one application, and three services it relies on underneath.</h2>
+    <div class="body-copy">
+      <figure class="diagram">
+        <svg viewBox="0 0 1000 560" role="img" aria-label="Public Site, Account Holder App, and Agent Ops Console all run on one React web app, which calls one FastAPI backend, which reads and writes the database, sends prompts to the Groq LLM, and sends scanned images to local OCR.">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- Row 1: surfaces -->
+          <g>
+            <rect x="30" y="20" width="280" height="72" rx="14" fill="var(--surface)" stroke="currentColor" stroke-width="1.3"/>
+            <text x="170" y="52" text-anchor="middle" class="arch-box-label">Public Site</text>
+            <text x="170" y="70" text-anchor="middle" class="arch-box-sub">Marketing + FAQ Assistant</text>
+
+            <rect x="360" y="20" width="280" height="72" rx="14" fill="var(--surface)" stroke="var(--amber)" stroke-width="1.6"/>
+            <text x="500" y="52" text-anchor="middle" class="arch-box-label">Account Holder App</text>
+            <text x="500" y="70" text-anchor="middle" class="arch-box-sub">Banking, KYC, AI Insights</text>
+
+            <rect x="690" y="20" width="280" height="72" rx="14" fill="var(--surface)" stroke="var(--teal)" stroke-width="1.6"/>
+            <text x="830" y="52" text-anchor="middle" class="arch-box-label">Agent Ops Console</text>
+            <text x="830" y="70" text-anchor="middle" class="arch-box-sub">Fraud, AML, Underwriting</text>
+          </g>
+
+          <!-- connectors row1 -> row2 -->
+          <path d="M170,92 L350,150" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#arrow)"/>
+          <path d="M500,92 L500,150" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#arrow)"/>
+          <path d="M830,92 L650,150" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#arrow)"/>
+
+          <!-- Row 2: frontend -->
+          <rect x="250" y="150" width="500" height="70" rx="14" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.3"/>
+          <text x="500" y="182" text-anchor="middle" class="arch-box-label">Vantra Web App</text>
+          <text x="500" y="200" text-anchor="middle" class="arch-box-sub">React + TypeScript, one shared design system</text>
+
+          <!-- connector row2 -> row3 -->
+          <path d="M500,220 L500,278" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#arrow)"/>
+          <text x="516" y="253" class="arch-arrow-label">https / json</text>
+
+          <!-- Row 3: backend -->
+          <rect x="250" y="280" width="500" height="70" rx="14" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.3"/>
+          <text x="500" y="312" text-anchor="middle" class="arch-box-label">Vantra API</text>
+          <text x="500" y="330" text-anchor="middle" class="arch-box-sub">FastAPI · authentication · business rules</text>
+
+          <!-- connectors row3 -> row4 -->
+          <path d="M400,350 L170,420" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#arrow)"/>
+          <text x="240" y="392" class="arch-arrow-label">reads / writes</text>
+
+          <path d="M500,350 L500,420" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#arrow)"/>
+          <text x="516" y="392" class="arch-arrow-label">prompt → completion</text>
+
+          <path d="M600,350 L830,420" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#arrow)"/>
+          <text x="700" y="392" class="arch-arrow-label">image → text</text>
+
+          <!-- Row 4: services -->
+          <rect x="30" y="420" width="280" height="86" rx="14" fill="var(--surface)" stroke="currentColor" stroke-width="1.3"/>
+          <text x="170" y="452" text-anchor="middle" class="arch-box-label">Database</text>
+          <text x="170" y="470" text-anchor="middle" class="arch-box-sub">Accounts · Cases · Audit Log</text>
+
+          <rect x="360" y="420" width="280" height="86" rx="14" fill="var(--surface)" stroke="var(--teal)" stroke-width="1.6"/>
+          <text x="500" y="452" text-anchor="middle" class="arch-box-label">Groq LLM</text>
+          <text x="500" y="470" text-anchor="middle" class="arch-box-sub">Chat · Analysis · Drafting</text>
+
+          <rect x="690" y="420" width="280" height="86" rx="14" fill="var(--surface)" stroke="currentColor" stroke-width="1.3"/>
+          <text x="830" y="452" text-anchor="middle" class="arch-box-label">Local OCR</text>
+          <text x="830" y="470" text-anchor="middle" class="arch-box-sub">Document reading, on our infrastructure</text>
+        </svg>
+        <figcaption>Every surface goes through the same application and the same audit-logged API — there is no side channel where AI acts directly on data.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 4: HUMAN IN THE LOOP -->
+  <section class="slide">
+    <div class="kicker"><div class="brand"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vantra</div><div class="slide-no">04 / 16</div></div>
+    <div class="eyebrow"><span class="dot"></span>Architecture — Governance</div>
+    <h1 class="title">The AI never acts alone.</h1>
+    <h2 class="subtitle">Worked example: identity verification (KYC). The pattern is identical everywhere AI touches a decision — fraud, AML, underwriting, case routing.</h2>
+    <div class="body-copy">
+      <figure class="diagram">
+        <svg viewBox="0 0 1300 220" role="img" aria-label="Customer uploads an ID, OCR reads it locally, the LLM drafts fields with confidence scores into an AI recommendation that is explicitly not a decision, a human agent reviews and decides, and only then is the customer notified.">
+          <defs>
+            <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <g font-family="Inter">
+            <rect x="35" y="60" width="180" height="80" rx="12" fill="var(--surface)" stroke="currentColor" stroke-width="1.2"/>
+            <text x="125" y="97" text-anchor="middle" class="arch-box-label">Customer</text>
+            <text x="125" y="115" text-anchor="middle" class="arch-box-sub">uploads ID photo</text>
+
+            <path d="M215,100 L245,100" stroke="currentColor" stroke-width="1.2" marker-end="url(#arrow2)"/>
+
+            <rect x="245" y="60" width="180" height="80" rx="12" fill="var(--surface)" stroke="currentColor" stroke-width="1.2"/>
+            <text x="335" y="97" text-anchor="middle" class="arch-box-label">OCR</text>
+            <text x="335" y="115" text-anchor="middle" class="arch-box-sub">reads text, locally</text>
+
+            <path d="M425,100 L455,100" stroke="currentColor" stroke-width="1.2" marker-end="url(#arrow2)"/>
+
+            <rect x="455" y="60" width="190" height="80" rx="12" fill="var(--surface)" stroke="currentColor" stroke-width="1.2"/>
+            <text x="550" y="90" text-anchor="middle" class="arch-box-label">LLM</text>
+            <text x="550" y="108" text-anchor="middle" class="arch-box-sub">drafts fields +</text>
+            <text x="550" y="122" text-anchor="middle" class="arch-box-sub">confidence scores</text>
+
+            <path d="M645,100 L675,100" stroke="currentColor" stroke-width="1.2" marker-end="url(#arrow2)"/>
+
+            <rect x="675" y="55" width="210" height="90" rx="12" fill="none" stroke="var(--teal)" stroke-width="1.6" stroke-dasharray="6 5"/>
+            <text x="780" y="92" text-anchor="middle" class="arch-box-label" fill="var(--teal)">AI Recommendation</text>
+            <text x="780" y="110" text-anchor="middle" class="arch-box-sub">— not a decision —</text>
+
+            <path d="M885,100 L925,100" stroke="var(--amber)" stroke-width="1.8" marker-end="url(#arrow2)"/>
+            <text x="905" y="82" text-anchor="middle" class="arch-arrow-label" fill="var(--amber)">human review</text>
+            <text x="905" y="94" text-anchor="middle" class="arch-arrow-label" fill="var(--amber)">required</text>
+
+            <rect x="925" y="50" width="220" height="100" rx="12" fill="var(--amber)"/>
+            <text x="1035" y="90" text-anchor="middle" font-weight="700" font-size="14" fill="var(--amber-ink)">Agent</text>
+            <text x="1035" y="108" text-anchor="middle" font-size="12" fill="var(--amber-ink)">reviews &amp; decides</text>
+            <text x="1035" y="124" text-anchor="middle" font-size="10.5" fill="var(--amber-ink)" opacity=".8">approve / more info / reject</text>
+
+            <path d="M1035,150 L1035,175 L1150,175" stroke="currentColor" stroke-width="1.2" fill="none" marker-end="url(#arrow2)"/>
+            <text x="1150" y="200" text-anchor="end" class="arch-box-label">Customer notified</text>
+            <text x="1150" y="216" text-anchor="end" class="arch-box-sub">of the human's decision</text>
+          </g>
+        </svg>
+        <figcaption>The dashed box is the only thing AI produces. The solid amber box — a person — is what the customer's outcome actually depends on.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 5: THREE EXPERIENCES -->
+  <section class="slide">
+    <div class="kicker"><div class="brand"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vantra</div><div class="slide-no">05 / 16</div></div>
+    <div class="eyebrow"><span class="dot"></span>Feature Map</div>
+    <h1 class="title">Three experiences, one platform.</h1>
+    <h2 class="subtitle">Everything below is built and working — what follows this slide is a tour of it in action.</h2>
+    <div class="body-copy">
+      <div class="grid-3">
+        <div class="card" style="display:flex;flex-direction:column;gap:14px">
+          <span class="pill pill-muted" style="align-self:flex-start">Public Site</span>
+          <ul class="check">
+            <li>✓ Marketing homepage &amp; product offers</li>
+            <li>✓ 24/7 chat + voice assistant</li>
+            <li>✓ AI transparency page</li>
+          </ul>
+        </div>
+        <div class="card" style="display:flex;flex-direction:column;gap:14px;border-color:rgba(232,178,61,.35)">
+          <span class="pill pill-amber" style="align-self:flex-start">Account Holder App</span>
+          <ul class="check">
+            <li>✓ Dashboard with AI spending insights &amp; 30-day forecast</li>
+            <li>✓ KYC automation — scan, sign, submit</li>
+            <li>✓ Fraud dispute assistant</li>
+            <li>✓ Transfers, cards, goals, account-aware chat</li>
+          </ul>
+        </div>
+        <div class="card" style="display:flex;flex-direction:column;gap:14px;border-color:rgba(47,212,196,.35)">
+          <span class="pill pill-teal" style="align-self:flex-start">Agent Ops Console</span>
+          <ul class="check">
+            <li>✓ Real-time AML detection sweep</li>
+            <li>✓ Fraud queue with AI explanations</li>
+            <li>✓ KYC review with AI recommendations</li>
+            <li>✓ Document OCR + account linking</li>
+            <li>✓ Case triage with live AI routing</li>
+            <li>✓ Underwriting with counterfactual analysis</li>
+            <li>✓ Policy library + RAG-grounded Copilot</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6: DEMO — ASSISTANT -->
+  <section class="slide">
+    <div class="kicker"><div class="brand"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vantra</div><div class="slide-no">06 / 16</div></div>
+    <div class="eyebrow"><span class="dot"></span>Demonstration — Public Site</div>
+    <h1 class="title">24/7 answers, no hold music.</h1>
+    <h2 class="subtitle">The same assistant engine that powers the public FAQ also powers the account-aware chat inside the app and the internal Copilot agents use.</h2>
+    <div class="body-copy grid-2" style="align-items:center">
+      <div>
+        <ul class="check">
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="var(--positive)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Answers stream token-by-token, live from the model — not scripted responses</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="var(--positive)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Voice in and voice out, built on the browser's native speech APIs</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="var(--positive)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Product recommendations and a live EMI/loan calculator alongside the chat</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="var(--positive)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Never invents account specifics it can't see — tells visitors to log in instead</li>
+        </ul>
+      </div>
+      <div class="mock">
+        <div class="mock-bar"><span></span><span></span><span></span></div>
+        <div class="mock-body">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <div class="orb" style="width:26px;height:26px"></div>
+            <div><div style="font-weight:600;font-size:13px">Ask Vantra</div><div style="font-size:10.5px;color:var(--ink-muted)">Online · answers in seconds</div></div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+            <div style="background:var(--amber);color:var(--amber-ink);padding:9px 13px;border-radius:14px 14px 3px 14px;font-size:12.5px;max-width:80%">What is an EMI?</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <div class="orb" style="width:18px;height:18px;margin-top:2px"></div>
+            <div style="background:var(--surface-3);padding:9px 13px;border-radius:14px 14px 14px 3px;font-size:12.5px;max-width:85%;line-height:1.5">An EMI is the fixed amount you pay each month toward a loan, covering both principal and interest. Want me to calculate one for you?</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7: DEMO — DASHBOARD INSIGHTS -->
+  <section class="slide">
+    <div class="kicker"><div class="brand"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vantra</div><div class="slide-no">07 / 16</div></div>
+    <div class="eyebrow"><span class="dot"></span>Demonstration — Account Holder App</div>
+    <h1 class="title">The dashboard tells you what's coming, not just what happened.</h1>
+    <h2 class="subtitle">Real output, captured from the running system — not a mockup.</h2>
+    <div class="body-copy grid-2">
+      <div class="card" style="background:rgba(199,239,216,.06);border-color:rgba(199,239,216,.25)">
+        <span class="pill" style="background:rgba(199,239,216,.18);color:#c7efd8">✦ AI Insight</span>
+        <p style="margin-top:12px;font-weight:600;font-size:15px">Travel Spending Up, Iceland Goal Close</p>
+        <p style="margin-top:6px;font-size:13px;color:var(--ink-muted);line-height:1.6">"Travel expenses reached $612 this month, but your Iceland Trip savings are 68% funded — just $1,920 away from hitting your target!"</p>
+      </div>
+      <div class="card">
+        <span class="pill pill-teal">↗ 30-Day Cash Flow Forecast</span>
+        <p style="margin-top:12px;font-family:var(--font-mono);font-size:24px;font-weight:600">$31,523 → $40,576</p>
+        <p style="margin-top:6px;font-size:13px;color:var(--ink-muted);line-height:1.6">Projected from today's balance, based on 2 recurring items the system detected automatically from transaction history (payroll, utilities) — no manual setup.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8: DEMO — KYC -->
+  <section class="slide">
+    <div class="kicker"><div class="brand"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vantra</div><div class="slide-no">08 / 16</div></div>
+    <div class="eyebrow"><span class="dot"></span>Demonstration — KYC Automation</div>
+    <h1 class="title">Identity verification in four steps, minutes not days.</h1>
+    <h2 class="subtitle">Scan → OCR + LLM extraction → digital signature → agent review. Real applicant, real output.</h2>
+    <div class="body-copy">
+      <div style="display:flex;gap:8px;margin-bottom:20px">
+        <span class="pill pill-pos">1 · Upload</span><span class="pill pill-pos">2 · AI Review</span><span class="pill pill-pos">3 · Sign</span><span class="pill pill-amber">4 · Agent Approves</span>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <p style="font-size:11.5px;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.08em;font-family:var(--font-mono);margin-bottom:12px">Extracted fields — Priya Sathe</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div style="background:var(--surface-3);border-radius:10px;padding:9px 12px"><div style="font-size:10px;color:var(--ink-muted)">Full name</div><div style="font-size:13px;font-weight:600">Priya Sathe</div></div>
+            <div style="background:var(--surface-3);border-radius:10px;padding:9px 12px"><div style="font-size:10px;color:var(--ink-muted)">Date of birth</div><div style="font-size:13px;font-weight:600">14/03/1991</div></div>
+            <div style="background:var(--surface-3);border-radius:10px;padding:9px 12px;grid-column:1 / -1"><div style="font-size:10px;color:var(--ink-muted)">Address</div><div style="font-size:13px;font-weight:600">221 Birchwood Ave, Austin, TX</div></div>
+            <div style="background:var(--surface-3);border-radius:10px;padding:9px 12px"><div style="font-size:10px;color:var(--ink-muted)">ID number</div><div style="font-size:13px;font-weight:600">TX-88213904</div></div>
+            <div style="background:var(--surface-3);border-radius:10px;padding:9px 12px"><div style="font-size:10px;color:var(--ink-muted)">Confidence</div><div style="font-size:13px;font-weight:600;color:var(--positive)">95%</div></div>
+          </div>
+        </div>
+        <div class="card" style="background:rgba(199,239,216,.06);border-color:rgba(199,239,216,.25)">
+          <span class="pill" style="background:rgba(199,239,216,.18);color:#c7efd8">✦ AI Recommendation → Approve</span>
+          <ul class="check" style="margin-top:12px">
+            <li>All OCR confidence scores are 95%, exceeding the 75% threshold</li>
+            <li>Personal details, address, and ID format are consistent with a US resident</li>
+            <li>No implausible or conflicting information detected</li>
+          </ul>
+          <p style="margin-top:14px;font-size:11.5px;color:var(--ink-faint)">Case KYC-40001 · agent approved on review</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9: DEMO — DISPUTE LOOP -->
+  <section class="slide">
+    <div class="kicker"><div class="brand"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vantra</div><div class="slide-no">09 / 16</div></div>
+    <div class="eyebrow"><span class="dot"></span>Demonstration — Fraud Dispute Assistant</div>
+    <h1 class="title">A customer's dispute reaches an agent's queue in seconds.</h1>
+    <h2 class="subtitle">Closed loop, verified live: filed by the customer, appeared instantly in the agent's Case Inbox.</h2>
+    <div class="body-copy grid-2">
+      <div class="card">
+        <span class="pill pill-amber">Customer side</span>
+        <p style="margin-top:12px;font-size:12.5px;color:var(--ink-muted)">"Unusual transaction flagged — a $1,240 charge in Lagos, NG"</p>
+        <div style="margin-top:10px;background:var(--surface-3);border-radius:12px;padding:12px;font-size:12.5px;line-height:1.5">"I was home all week and never went to Lagos. I don't recognize this merchant at all."</div>
+        <p style="margin-top:10px;font-size:11.5px;color:var(--positive)">✓ Dispute filed</p>
+      </div>
+      <div class="card" style="border-color:rgba(47,212,196,.3)">
+        <span class="pill pill-teal">Agent side — Case Inbox</span>
+        <p style="margin-top:12px;font-weight:600;font-size:13.5px">Transaction dispute <span class="pill pill-neg" style="margin-left:6px">Fraud</span></p>
+        <div style="margin-top:8px;background:var(--surface-3);border-radius:12px;padding:12px;font-size:12.5px;line-height:1.5">"Customer disputes an unauthorized transaction from an unrecognized merchant in Lagos, confirming they were home all week and did not make the purchase."</div>
+        <p style="margin-top:10px;font-size:11.5px;color:var(--ink-muted)">Routed to Fraud · <span style="color:var(--teal)">90% confidence</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10: DEMO — AGENT DASHBOARD -->
+  <section class="slide">
+    <div class="kicker"><div class="brand"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vantra</div><div class="slide-no">10 / 16</div></div>
+    <div class="eyebrow"><span class="dot"></span>Demonstration — Agent Ops Console</div>
+    <h1 class="title">One screen, every queue.</h1>
+    <h2 class="subtitle">Every number below is a live count from the database — not a static demo screen.</h2>
+    <div class="body-copy">
+      <div class="grid-3" style="grid-template-columns:repeat(4,1fr)">
+        <div class="card" style="text-align:center"><div class="stat-num" style="font-size:30px">1</div><div style="font-size:11.5px;color:var(--ink-muted);margin-top:4px">Pending KYC Reviews</div></div>
+        <div class="card" style="text-align:center"><div class="stat-num" style="font-size:30px;color:var(--negative)">4</div><div style="font-size:11.5px;color:var(--ink-muted);margin-top:4px">Open Fraud Alerts</div></div>
+        <div class="card" style="text-align:center"><div class="stat-num" style="font-size:30px;color:var(--watch)">4</div><div style="font-size:11.5px;color:var(--ink-muted);margin-top:4px">Unread Case Emails</div></div>
+        <div class="card" style="text-align:center"><div class="stat-num" style="font-size:30px;color:var(--teal)">4</div><div style="font-size:11.5px;color:var(--ink-muted);margin-top:4px">Underwriting Decisions</div></div>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <p style="font-size:12px;color:var(--ink-muted);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Priority worklist (merged across every queue)</p>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;padding:9px 0;border-bottom:1px solid var(--border)"><span>AML · Halden Import Group</span><span class="pill pill-neg">Critical</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;padding:9px 0;border-bottom:1px solid var(--border)"><span>Fraud · M. Okafor</span><span class="pill pill-neg">High</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;padding:9px 0"><span>Underwriting · Coastal Fabrication LLC</span><span class="pill pill-watch">Medium</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11: DEMO — AML -->
+  <section class="slide">
+    <div class="kicker"><div class="brand"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vantra</div><div class="slide-no">11 / 16</div></div>
+    <div class="eyebrow"><span class="dot"></span>Demonstration — Real-Time AML Detection</div>
+    <h1 class="title">The flagship: AML detection that actually computes.</h1>
+    <h2 class="subtitle">Not a canned alert. "Run AML Sweep" scans real transaction history for structuring and rapid fund movement, live.</h2>
+    <div class="body-copy grid-2">
+      <div class="card" style="border-color:rgba(47,212,196,.3)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono)">ALT-638FE3</p>
+            <p style="font-weight:700;font-size:15px;margin-top:2px">Rapid Fund Movement</p>
+          </div>
+          <span class="pill pill-teal">Live</span>
+        </div>
+        <div style="margin-top:10px;background:var(--surface-3);border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;font-size:12.5px"><span>Nadia Kowalczyk</span><span style="font-family:var(--font-mono)">$50,100.00</span></div>
+        <p style="margin-top:10px;font-size:12px;line-height:1.6;color:var(--ink-muted)">"The rapid dissipation of a $32,000 payroll deposit into multiple external transfers within a three-hour window presents a high risk of layering... aligns with the pass-through account typology."</p>
+      </div>
+      <div class="card" style="background:rgba(47,212,196,.06);border-color:rgba(47,212,196,.3)">
+        <span class="pill pill-teal">📄 Drafted SAR narrative</span>
+        <p style="margin-top:12px;font-size:12px;line-height:1.65;color:var(--ink-muted)">"Account holder Nadia Kowalczyk engaged in rapid fund movement totaling $50,100.00... the funds were fragmented into three external transfers amounting to $18,100.00, suggesting an attempt to quickly move proceeds... raising concerns regarding layering to obscure the source of funds..."</p>
+        <p style="margin-top:10px;font-size:11px;color:var(--ink-faint)">Generated on demand — ready for compliance review, not auto-filed</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12: DEMO — COPILOT RAG -->
+  <section class="slide">
+    <div class="kicker"><div class="brand"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vantra</div><div class="slide-no">12 / 16</div></div>
+    <div class="eyebrow"><span class="dot"></span>Demonstration — Compliance Copilot</div>
+    <h1 class="title">Answers cite the actual policy — not general knowledge.</h1>
+    <h2 class="subtitle">Every Copilot question first searches the real policy library, then answers only from what it finds.</h2>
+    <div class="body-copy">
+      <div class="mock" style="max-width:760px;margin:0 auto">
+        <div class="mock-bar"><span></span><span></span><span></span><span style="margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--ink-muted);background:none;width:auto;height:auto;border-radius:0">Vantra Copilot</span></div>
+        <div class="mock-body">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+            <div style="background:var(--amber);color:var(--amber-ink);padding:9px 13px;border-radius:14px 14px 3px 14px;font-size:12.5px">When is enhanced due diligence required for a customer?</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <div class="orb" style="width:18px;height:18px;margin-top:2px"></div>
+            <div style="background:var(--surface-3);padding:11px 14px;border-radius:14px 14px 14px 3px;font-size:12.5px;max-width:92%;line-height:1.6">
+              Based on the retrieved policy context, enhanced due diligence (EDD) is required in two scenarios... if a customer's identity cannot be verified within the standard 30-day window after account opening, the case must be escalated to Compliance for enhanced due diligence.
+              <div style="margin-top:8px;font-size:11px;color:var(--teal)">Source: [BSA/AML] Customer Identification Program (CIP) Standard</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13: DEMO — UNDERWRITING -->
+  <section class="slide">
+    <div class="kicker"><div class="brand"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vantra</div><div class="slide-no">13 / 16</div></div>
+    <div class="eyebrow"><span class="dot"></span>Demonstration — Credit Underwriting</div>
+    <h1 class="title">Not just a risk score — a reason and a path forward.</h1>
+    <h2 class="subtitle">"Regenerate AI Analysis" tells the underwriter exactly what would change the outcome.</h2>
+    <div class="body-copy grid-2">
+      <div>
+        <p style="font-weight:700;font-size:16px">Coastal Fabrication LLC</p>
+        <p style="font-size:12.5px;color:var(--ink-muted);margin-top:2px">Business Term Loan · requesting $185,000</p>
+        <div class="grid-3" style="margin-top:16px">
+          <div class="card" style="text-align:center;padding:14px"><div class="stat-num" style="font-size:22px">34%</div><div style="font-size:10.5px;color:var(--ink-muted)">Debt-to-Income</div></div>
+          <div class="card" style="text-align:center;padding:14px"><div class="stat-num" style="font-size:22px">712</div><div style="font-size:10.5px;color:var(--ink-muted)">Credit Score</div></div>
+          <div class="card" style="text-align:center;padding:14px"><div class="stat-num" style="font-size:22px">61%</div><div style="font-size:10.5px;color:var(--ink-muted)">Loan-to-Value</div></div>
+        </div>
+        <span class="pill pill-watch" style="margin-top:16px">Risk Grade B</span>
+      </div>
+      <div class="card" style="background:rgba(232,178,61,.06);border-color:rgba(232,178,61,.3)">
+        <span class="pill pill-amber">↻ What would change the grade</span>
+        <p style="margin-top:12px;font-size:13.5px;line-height:1.65">"Reducing the loan-to-value ratio to below 50% by increasing the down payment or collateral value would likely upgrade the risk grade to A."</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 14: RESPONSIBLE AI -->
+  <section class="slide">
+    <div class="kicker"><div class="brand"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vantra</div><div class="slide-no">14 / 16</div></div>
+    <div class="eyebrow"><span class="dot"></span>Trust &amp; Governance</div>
+    <h1 class="title">Our operating principles.</h1>
+    <h2 class="subtitle">Published in-product at <span style="font-family:var(--font-mono);color:var(--teal)">/trust</span> — visible to every customer, not just this room.</h2>
+    <div class="body-copy">
+      <div class="grid-2">
+        <div class="card" style="display:flex;gap:12px"><span style="font-size:20px">①</span><p style="font-size:13.5px;line-height:1.6;color:var(--ink-muted)">A human makes every decision that affects an account, a payment, or an application outcome — approvals, rejections, and fraud confirmations are never fully automated.</p></div>
+        <div class="card" style="display:flex;gap:12px"><span style="font-size:20px">②</span><p style="font-size:13.5px;line-height:1.6;color:var(--ink-muted)">Every AI-generated field, summary, or recommendation is labeled and shown next to the data it came from, so it can be verified, not just trusted.</p></div>
+        <div class="card" style="display:flex;gap:12px"><span style="font-size:20px">③</span><p style="font-size:13.5px;line-height:1.6;color:var(--ink-muted)">Customer data answers customer questions — it is not used to train shared models or sold to third parties.</p></div>
+        <div class="card" style="display:flex;gap:12px"><span style="font-size:20px">④</span><p style="font-size:13.5px;line-height:1.6;color:var(--ink-muted)">Every AI surface has a path to a real person. You can always ask a human.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 15: STATUS & ROADMAP -->
+  <section class="slide">
+    <div class="kicker"><div class="brand"><svg viewBox="0 0 24 24" fill="none"><path d="M3 4L12 20L21 4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Vantra</div><div class="slide-no">15 / 16</div></div>
+    <div class="eyebrow"><span class="dot"></span>Status</div>
+    <h1 class="title">Where this stands today.</h1>
+    <h2 class="subtitle">An honest accounting — what's fully live, and what we'd build next before a production pilot.</h2>
+    <div class="body-copy grid-2">
+      <div class="card">
+        <span class="pill pill-pos">Live &amp; real today</span>
+        <ul class="check" style="margin-top:14px">
+          <li>Auth, accounts, transfers, notifications</li>
+          <li>Full KYC pipeline: OCR → LLM → signature → agent decision</li>
+          <li>Real rules-based AML detection engine</li>
+          <li>RAG-grounded policy Copilot with citations</li>
+          <li>Live case routing, SAR drafting, underwriting analysis</li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="pill pill-watch">Next investment areas</span>
+        <ul class="check" style="margin-top:14px">
+          <li>Vision-model OCR once a vendor key is provisioned (currently local OCR + LLM)</li>
+          <li>Statistical anomaly-scoring model to complement rule-based AML</li>
+          <li>Mobile-responsive agent console (currently desktop-first)</li>
+          <li>Production-grade database, secrets management, rate limiting</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 16: CLOSING -->
+  <section class="slide">
+    <div style="flex:1;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:20px">
+      <div class="orb" style="width:44px;height:44px"></div>
+      <h1 class="title" style="font-size:clamp(32px,4.6vw,58px)">Questions, and where to look next.</h1>
+      <h2 class="subtitle">Every screen in this deck is a real, running feature — happy to drive live from here.</h2>
+      <div style="display:flex;gap:22px;margin-top:10px;font-family:var(--font-mono);font-size:12.5px;color:var(--ink-muted)">
+        <span>/trust — AI transparency page</span>
+        <span>/agent — Ops console</span>
+        <span>/app — Account holder app</span>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="navctl">
+  <button class="navbtn" onclick="prev()" aria-label="Previous slide">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <span class="navcount"><span id="cur">1</span> / <span id="tot">16</span></span>
+  <button class="navbtn" onclick="next()" aria-label="Next slide">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+</div>
+
+<script>
+  let n = 1;
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  document.getElementById('tot').textContent = total;
+
+  function show(i){
+    if(i<1) i=1; if(i>total) i=total;
+    n=i;
+    slides.forEach((s,idx)=>s.classList.toggle('active', idx===n-1));
+    document.getElementById('cur').textContent = n;
+    document.getElementById('progress').style.width = (n/total*100)+'%';
+  }
+  function next(){ show(n+1); }
+  function prev(){ show(n-1); }
+
+  document.addEventListener('keydown', e=>{
+    if(e.key==='ArrowRight' || e.key===' '){ e.preventDefault(); next(); }
+    if(e.key==='ArrowLeft'){ e.preventDefault(); prev(); }
+  });
+  document.addEventListener('click', e=>{
+    if(!e.target.closest('.navctl')) next();
+  });
+
+  show(1);
+</script>
+</body>
+</html>
