@@ -33,6 +33,7 @@ export default function Kyc() {
   const [agreed, setAgreed] = useState(false)
   const [caseRef, setCaseRef] = useState('')
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [resubmitting, setResubmitting] = useState(false)
 
   useEffect(() => {
     api.get<KycOut | null>('/api/kyc/me').then((res) => setExisting(res ?? 'none'))
@@ -63,12 +64,25 @@ export default function Kyc() {
     }
   }
 
+  function startResubmit() {
+    if (existing === 'none' || existing === 'loading') return
+    setKycId(existing.id)
+    setCaseRef(existing.case_ref)
+    setFields([])
+    setSigned(false)
+    setAgreed(false)
+    setUploadError(null)
+    setResubmitting(true)
+    setStep(0)
+  }
+
   async function submit() {
     if (!kycId) return
     const fieldMap = Object.fromEntries(fields.map((f) => [f.label, f.value]))
     const confidenceMap = Object.fromEntries(fields.map((f) => [f.label, f.confidence]))
     const result = await api.post<KycOut>(`/api/kyc/${kycId}/submit`, { fields: fieldMap, confidences: confidenceMap, signed: true })
     setExisting(result)
+    setResubmitting(false)
     setStep(3)
   }
 
@@ -76,7 +90,7 @@ export default function Kyc() {
     return <div className="mx-auto max-w-4xl"><div className="h-64 animate-pulse rounded-3xl bg-surface-2" /></div>
   }
 
-  if (existing !== 'none' && existing.status !== 'draft' && step !== 3) {
+  if (existing !== 'none' && existing.status !== 'draft' && step !== 3 && !resubmitting) {
     const copy = statusCopy[existing.status]
     const Icon = copy?.icon ?? ClockCounterClockwise
     return (
@@ -102,6 +116,11 @@ export default function Kyc() {
                 <p className="mb-1 text-xs font-semibold text-ink">Reviewer notes</p>
                 {existing.reviewer_notes}
               </div>
+            ) : null}
+            {existing.status === 'needs_info' ? (
+              <Button onClick={startResubmit} className="mt-2">
+                Resubmit documents
+              </Button>
             ) : null}
           </CardContent>
         </Card>
