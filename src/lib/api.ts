@@ -1,4 +1,8 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
+// Resolved at runtime from public/config.js (window.__VANTRA_CONFIG__) when present,
+// so a single built `dist/` folder can be pointed at any backend without rebuilding —
+// falls back to the build-time Vite env var, then a same-machine default.
+const runtimeConfig = (window as unknown as { __VANTRA_CONFIG__?: { API_BASE?: string } }).__VANTRA_CONFIG__
+const API_BASE = runtimeConfig?.API_BASE || import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
 export class ApiError extends Error {
   status: number

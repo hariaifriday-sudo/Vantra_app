@@ -123,6 +123,38 @@ If the frontend and backend run on **separate machines** (not just separate term
 2. On the frontend machine, set `VITE_API_BASE` in the root `.env` to the backend's reachable address (e.g. `http://192.168.1.40:8000`).
 3. Restart both after changing `.env` files — Vite and Uvicorn only read them at startup.
 
+## Running the frontend without Node or Docker
+
+The frontend is a static site once built — Node is only needed to *build*
+it, not to *run* it. If the target machine can't have Node or Docker at
+all, build on any machine that can (even temporarily, or someone else's),
+then move the output over:
+
+1. **Build it** (on a machine with Node): `npm install && npm run build`.
+   This produces a self-contained `dist/` folder — HTML, CSS, and JS only.
+2. **Copy `dist/` and `serve_static.py`** to the target machine (USB drive,
+   network share, `scp`, whatever's available — no `git`/`npm` needed there).
+3. **Point it at your backend.** Open the copied `dist/config.js` in any
+   text editor and set `API_BASE` to wherever the backend is reachable from
+   that machine (`http://localhost:8000` if the backend also runs there,
+   or another host's address — see the cross-machine section below). This
+   file is read at page-load time, not baked into the build, so editing it
+   directly on the target machine works with no rebuild.
+4. **Serve it** with Python (already required for the backend, so nothing
+   new to install):
+   ```bash
+   python serve_static.py            # serves dist/ at http://localhost:4173
+   python serve_static.py 8080       # or pick a different port
+   ```
+   This is a ~60-line stdlib-only script (no `pip install`) that also
+   handles client-side routing correctly — refreshing on `/agent/aml`
+   won't 404.
+
+If Python isn't available either, `dist/` is just static files — any web
+server can serve it (nginx, IIS, Caddy, Apache); just configure it to
+fall back to `index.html` for unknown paths (an "SPA fallback" or
+`try_files` rule) so client-side routes survive a refresh.
+
 ## Troubleshooting
 
 | Symptom | Fix |
