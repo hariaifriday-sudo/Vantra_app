@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { ChartPieSlice, CreditCard, House, IdentificationCard, ArrowsLeftRight, Bank, Gear } from '@phosphor-icons/react'
+import { ChartPieSlice, CreditCard, House, IdentificationCard, ArrowsLeftRight, Bank, Bell, Gear } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 import { VantraLogo } from './VantraLogo'
 
@@ -10,6 +10,7 @@ const items = [
   { to: '/app/cards', label: 'Cards', icon: CreditCard },
   { to: '/app/loans', label: 'Loans & Goals', icon: Bank },
   { to: '/app/kyc', label: 'KYC Center', icon: IdentificationCard },
+  { to: '/app/notifications', label: 'Notifications', icon: Bell },
 ]
 
 export function AccountSidebar() {

@@ -1,15 +1,25 @@
-import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
-import { Bell, ChatCircleDots, Envelope, X } from '@phosphor-icons/react'
+import { useEffect, useState } from 'react'
+import { Outlet, useNavigate } from 'react-router-dom'
+import { Bell, ChatCircleDots, X } from '@phosphor-icons/react'
 import { AccountSidebar } from './AccountSidebar'
 import { UserMenu } from './UserMenu'
 import { ChatPanel } from '../assistant/ChatPanel'
 import { useAuth } from '@/lib/auth'
+import { api, type NotificationOut } from '@/lib/api'
 
 export function AccountLayout() {
   const [chatOpen, setChatOpen] = useState(true)
+  const [unreadCount, setUnreadCount] = useState(0)
   const { user } = useAuth()
+  const navigate = useNavigate()
   const firstName = user?.fullName.split(' ')[0] ?? 'there'
+
+  useEffect(() => {
+    api
+      .get<NotificationOut[]>('/api/notifications/')
+      .then((list) => setUnreadCount(list.filter((n) => !n.read).length))
+      .catch(() => {})
+  }, [])
 
   return (
     <div className="flex h-screen gap-4 bg-paper p-4">
@@ -22,12 +32,13 @@ export function AccountLayout() {
             <p className="text-sm text-ink-muted">Here's what's happening with your money.</p>
           </div>
           <div className="flex items-center gap-2">
-            <button className="grid h-10 w-10 cursor-pointer place-items-center rounded-full border border-border-hair bg-surface text-ink-muted hover:text-ink" aria-label="Messages">
-              <Envelope size={18} />
-            </button>
-            <button className="relative grid h-10 w-10 cursor-pointer place-items-center rounded-full border border-border-hair bg-surface text-ink-muted hover:text-ink" aria-label="Notifications, 3 unread">
+            <button
+              onClick={() => navigate('/app/notifications')}
+              className="relative grid h-10 w-10 cursor-pointer place-items-center rounded-full border border-border-hair bg-surface text-ink-muted hover:text-ink"
+              aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+            >
               <Bell size={18} />
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-negative" />
+              {unreadCount > 0 ? <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-negative" /> : null}
             </button>
             <button
               onClick={() => setChatOpen((v) => !v)}
