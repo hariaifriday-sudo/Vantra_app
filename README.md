@@ -11,7 +11,7 @@ underwriting. Full-stack — real database, real auth, real LLM calls.
   Recharts, Phosphor icons. Two visual modes (light for customers, dark for
   agents) sharing one design-token system.
 - **Backend** — FastAPI + SQLAlchemy + SQLite, JWT auth (bcrypt-hashed
-  passwords), Groq (`qwen/qwen3.6-27b`) for chat/summarization/structured
+  passwords), Groq (`openai/gpt-oss-120b`) for chat/summarization/structured
   analysis, Tesseract OCR + Groq text model for document field extraction.
 
 ## Why OCR is Tesseract + LLM, not a vision model

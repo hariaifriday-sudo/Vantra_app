@@ -1,11 +1,27 @@
 import { useEffect, useState } from 'react'
-import { CreditCard, PiggyBank, ArrowsLeftRight, Snowflake, Bank, Target, User, Bell, ShieldCheck, CheckCircle, CalendarBlank } from '@phosphor-icons/react'
+import {
+  CreditCard,
+  PiggyBank,
+  ArrowsLeftRight,
+  Snowflake,
+  Bank,
+  Target,
+  User,
+  Bell,
+  ShieldCheck,
+  CheckCircle,
+  CalendarBlank,
+  Receipt,
+  MagnifyingGlass,
+  ShieldWarning,
+} from '@phosphor-icons/react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { StaggerGroup, StaggerItem } from '@/components/ui/SectionReveal'
 import { cn, formatCurrency } from '@/lib/utils'
 import { quickPayees } from '@/data/mock'
-import { api, ApiError, type Account, type ForecastOut, type SavingsGoal } from '@/lib/api'
+import { api, ApiError, type Account, type ForecastOut, type SavingsGoal, type SimulateTransactionsResult } from '@/lib/api'
+import { emitDataChanged, useDataRefresh } from '@/lib/refresh'
 
 function PageHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
@@ -20,10 +36,12 @@ const accountIcon: Record<string, typeof Bank> = { checking: Bank, savings: Pigg
 
 export function Accounts() {
   const [accounts, setAccounts] = useState<Account[] | null>(null)
-
-  useEffect(() => {
+  function load() {
     api.get<Account[]>('/api/accounts/').then(setAccounts)
-  }, [])
+  }
+
+  useEffect(load, [])
+  useDataRefresh(load)
 
   return (
     <div className="pb-10">
@@ -66,12 +84,15 @@ export function Transfers() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
+  function loadAccounts() {
     api.get<Account[]>('/api/accounts/').then((data) => {
       setAccounts(data)
-      setFromId(data[0]?.id ?? null)
+      setFromId((current) => current ?? data[0]?.id ?? null)
     })
-  }, [])
+  }
+
+  useEffect(loadAccounts, [])
+  useDataRefresh(loadAccounts)
 
   async function submit() {
     if (!fromId || !payee || !amount) return
@@ -144,9 +165,12 @@ export function Cards() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [frozen, setFrozen] = useState<Set<number>>(new Set())
 
-  useEffect(() => {
+  function load() {
     api.get<Account[]>('/api/accounts/').then((data) => setAccounts(data.filter((a) => a.type === 'credit')))
-  }, [])
+  }
+
+  useEffect(load, [])
+  useDataRefresh(load)
 
   async function freeze(id: number) {
     await api.post(`/api/accounts/cards/${id}/freeze`)
@@ -184,10 +208,13 @@ export function Loans() {
   const [goals, setGoals] = useState<SavingsGoal[]>([])
   const [forecast, setForecast] = useState<ForecastOut | null>(null)
 
-  useEffect(() => {
+  function load() {
     api.get<SavingsGoal[]>('/api/accounts/goals').then(setGoals)
     api.get<ForecastOut>('/api/accounts/forecast').then(setForecast)
-  }, [])
+  }
+
+  useEffect(load, [])
+  useDataRefresh(load)
 
   return (
     <div className="pb-10">
@@ -243,6 +270,60 @@ export function Loans() {
   )
 }
 
+type SimScenario = 'regular' | 'aml' | 'fraud'
+
+const simOptions: { scenario: SimScenario; icon: typeof Receipt; label: string; description: string }[] = [
+  { scenario: 'regular', icon: Receipt, label: 'Generate regular activity', description: 'A few ordinary purchases and bills — nothing should get flagged.' },
+  { scenario: 'aml', icon: MagnifyingGlass, label: 'Simulate an AML scenario', description: 'Structuring or rapid-transfer activity — triggers a real AML alert for an agent.' },
+  { scenario: 'fraud', icon: ShieldWarning, label: 'Simulate a fraud scenario', description: 'A geo-mismatch, card-testing burst, or amount outlier — triggers a real fraud alert.' },
+]
+
+function SimulateRow({ scenario, icon: Icon, label, description }: (typeof simOptions)[number]) {
+  const [status, setStatus] = useState<'idle' | 'working' | 'done' | 'error'>('idle')
+  const [result, setResult] = useState<SimulateTransactionsResult | null>(null)
+
+  async function run() {
+    setStatus('working')
+    try {
+      const res = await api.post<SimulateTransactionsResult>('/api/banking/simulate-transactions', { scenario })
+      setResult(res)
+      setStatus('done')
+      emitDataChanged()
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  return (
+    <div className="px-6 py-4">
+      <div className="flex items-center gap-3">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-2 text-ink-muted">
+          <Icon size={17} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-ink">{label}</p>
+          <p className="text-xs text-ink-muted">{description}</p>
+        </div>
+        <Button size="sm" variant="secondary" onClick={run} disabled={status === 'working'} className="shrink-0">
+          {status === 'working' ? 'Running…' : 'Run'}
+        </Button>
+      </div>
+      {status === 'done' && result ? (
+        <p className="mt-2 flex items-center gap-1.5 pl-12 text-xs text-positive">
+          <CheckCircle size={13} weight="fill" />
+          {result.transactions_created} transaction{result.transactions_created === 1 ? '' : 's'} added
+          {result.alerts_created.length > 0
+            ? ` — ${result.alerts_created.length} alert${result.alerts_created.length === 1 ? '' : 's'} generated (${result.pattern.replace(/_/g, ' ')})`
+            : ' — no alerts triggered'}
+          .
+        </p>
+      ) : status === 'error' ? (
+        <p className="mt-2 pl-12 text-xs text-negative">Something went wrong — try again.</p>
+      ) : null}
+    </div>
+  )
+}
+
 export function Settings() {
   const rows = [
     { icon: User, label: 'Profile & personal details' },
@@ -262,6 +343,17 @@ export function Settings() {
               <r.icon size={18} className="text-ink-muted" />
               {r.label}
             </button>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Demo &amp; Testing</CardTitle>
+        </CardHeader>
+        <CardContent className="divide-y divide-border-hair p-0">
+          {simOptions.map((opt) => (
+            <SimulateRow key={opt.scenario} {...opt} />
           ))}
         </CardContent>
       </Card>

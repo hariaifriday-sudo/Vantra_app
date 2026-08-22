@@ -25,6 +25,15 @@
   --shadow-lift: 0 4px 10px rgba(20, 20, 20, 0.06), 0 20px 40px -16px rgba(20, 20, 20, 0.16);
 }
 
+/* Shared motion vocabulary — every animation in the app pulls from these three
+   curves rather than approximating its own. Built-in CSS easings are too weak
+   for UI; these are the standard strong-curve replacements. */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);        /* entrances, exits */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);    /* moving/morphing on screen */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);     /* iOS-like drawer/sheet curve */
+}
+
 :root {
   /* Mode A — Public site + Account Holder Portal (light) */
   --paper: #fafaf9;

@@ -5,7 +5,11 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        'rounded-3xl border border-border-hair bg-surface shadow-soft transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-lift',
+        // Tailwind's `hover:` already compiles to `@media (hover: hover)` (v3.4+),
+        // so this doesn't stick on touch — no extra gating needed.
+        'rounded-3xl border border-border-hair bg-surface shadow-soft',
+        'transition-[transform,box-shadow] duration-300 [transition-timing-function:var(--ease-out)]',
+        'hover:-translate-y-0.5 hover:shadow-lift',
         className,
       )}
       {...props}

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import Base, engine
-from .routers import accounts, aml, audit, auth, cases, chat, documents, fraud, kyc, notifications, overview, policies, underwriting
+from .routers import accounts, aml, audit, auth, banking, cases, chat, documents, fraud, kyc, notifications, overview, policies, underwriting
 
 Base.metadata.create_all(bind=engine)
 
@@ -30,6 +30,7 @@ app.include_router(policies.router)
 app.include_router(audit.router)
 app.include_router(chat.router)
 app.include_router(overview.router)
+app.include_router(banking.router)
 
 
 @app.get("/api/health")

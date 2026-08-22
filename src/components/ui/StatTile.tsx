@@ -1,11 +1,14 @@
 import type { ReactNode } from 'react'
 import { ArrowUpRight, TrendUp, TrendDown } from '@phosphor-icons/react'
-import { cn } from '@/lib/utils'
+import { cn, formatCurrency } from '@/lib/utils'
+import { AnimatedNumber } from './AnimatedNumber'
 import { Card } from './Card'
 
 interface StatTileProps {
   label: string
   value: string
+  /** When given, the tile tweens to this value on change instead of the static `value` string. */
+  numericValue?: number
   delta?: { value: string; positive: boolean }
   tint?: 'mint' | 'lavender' | 'sky' | 'none'
   period?: string
@@ -20,7 +23,7 @@ const tints: Record<string, string> = {
   none: 'bg-surface',
 }
 
-export function StatTile({ label, value, delta, tint = 'none', period, action, className }: StatTileProps) {
+export function StatTile({ label, value, numericValue, delta, tint = 'none', period, action, className }: StatTileProps) {
   return (
     <Card className={cn('group relative overflow-hidden p-5', tints[tint], className)}>
       <div className="flex items-start justify-between">
@@ -30,7 +33,9 @@ export function StatTile({ label, value, delta, tint = 'none', period, action, c
         ) : null}
       </div>
       <div className="mt-4 flex items-end justify-between">
-        <span className="font-display tabular-nums text-3xl font-bold text-ink">{value}</span>
+        <span className="font-display tabular-nums text-3xl font-bold text-ink">
+          {numericValue !== undefined ? <AnimatedNumber value={numericValue} format={formatCurrency} /> : value}
+        </span>
         {action ?? (
           <span className="grid h-9 w-9 place-items-center rounded-full bg-surface/70 text-ink transition-transform duration-200 group-hover:translate-x-0.5">
             <ArrowUpRight size={16} weight="bold" />

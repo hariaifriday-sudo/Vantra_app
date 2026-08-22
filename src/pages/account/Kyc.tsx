@@ -121,6 +121,14 @@ export default function Kyc() {
               <Button onClick={startResubmit} className="mt-2">
                 Resubmit documents
               </Button>
+            ) : existing.status === 'rejected' ? (
+              <Button onClick={startResubmit} className="mt-2">
+                Try again
+              </Button>
+            ) : existing.status === 'approved' ? (
+              <Button variant="secondary" onClick={startResubmit} className="mt-2">
+                Start a new verification
+              </Button>
             ) : null}
           </CardContent>
         </Card>

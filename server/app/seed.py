@@ -5,6 +5,7 @@ from .database import Base, SessionLocal, engine
 from .models import (
     Account,
     AmlAlert,
+    Beneficiary,
     CaseTicket,
     FraudAlert,
     Notification,
@@ -114,6 +115,14 @@ def run():
         for i, (amount, days) in enumerate([(-3400, 2.5), (-3800, 1.9), (-4100, 1.2), (-3600, 0.4)]):
             db.add(TransactionRecord(account_id=halden_checking.id, merchant=f"Wire Out — Partner {chr(65 + i)}", category="Wire Transfer", amount=amount, status="Completed", occurred_at=days_ago(days)))
         db.add(TransactionRecord(account_id=halden_checking.id, merchant="Client Payment — Meridian Corp", category="Income", amount=61400.00, status="Completed", occurred_at=days_ago(5)))
+
+        db.add_all([
+            Beneficiary(user_id=maren.id, name="Anna Petrova", account_ref="ACC-80231", bank_name="Vantra Bank", color="#e8b23d"),
+            Beneficiary(user_id=maren.id, name="Sam Delgado", account_ref="ACC-80452", bank_name="Vantra Bank", color="#c9c2f0"),
+            Beneficiary(user_id=maren.id, name="Lily Chen", account_ref="ACC-80119", bank_name="First Meridian Bank", color="#bfe3f5"),
+            Beneficiary(user_id=maren.id, name="Clara Nwosu", account_ref="ACC-80877", bank_name="Vantra Bank", color="#c7efd8"),
+            Beneficiary(user_id=maren.id, name="Ruben Osei", account_ref="ACC-80390", bank_name="First Meridian Bank", color="#e8b23d"),
+        ])
 
         db.add_all([
             SavingsGoal(user_id=maren.id, name="Iceland Trip", icon="airplane", target=6000, saved=4080, due_by="Jun 2027"),

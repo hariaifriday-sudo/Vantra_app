@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { DownloadSimple, Gear, X, Sparkle, CheckCircle } from '@phosphor-icons/react'
+import { DownloadSimple, Gear, X, Sparkle, CheckCircle, MagnifyingGlass } from '@phosphor-icons/react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Pill } from '@/components/ui/Pill'
 import { formatCurrency } from '@/lib/utils'
-import { api, type FraudAlertOut } from '@/lib/api'
+import { api, ApiError, type FraudAlertOut, type FraudScanResult } from '@/lib/api'
 
 const riskTone: Record<string, 'negative' | 'watch' | 'neutral'> = {
   Critical: 'negative',
@@ -20,10 +20,31 @@ export default function Fraud() {
   const [notes, setNotes] = useState('')
   const [toast, setToast] = useState<string | null>(null)
   const [acting, setActing] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [scanError, setScanError] = useState<string | null>(null)
 
   useEffect(() => {
     api.get<FraudAlertOut[]>('/api/fraud/alerts').then(setAlerts)
   }, [])
+
+  async function runScan() {
+    setScanning(true)
+    setScanError(null)
+    try {
+      const result = await api.post<FraudScanResult>('/api/fraud/scan')
+      if (result.created.length > 0) {
+        setAlerts((prev) => [...result.created, ...(prev ?? [])])
+        setToast(`Sweep found ${result.created.length} new alert${result.created.length === 1 ? '' : 's'} across ${result.scanned_transactions} transactions.`)
+      } else {
+        setToast(`Sweep complete — no new patterns across ${result.scanned_transactions} transactions.`)
+      }
+      window.setTimeout(() => setToast(null), 4000)
+    } catch (err) {
+      setScanError(err instanceof ApiError ? err.message : 'Scan failed — try again.')
+    } finally {
+      setScanning(false)
+    }
+  }
 
   async function act(action: 'confirm_fraud' | 'dismiss' | 'escalate', label: string) {
     if (!selected) return
@@ -51,6 +72,9 @@ export default function Fraud() {
           <p className="mt-1 text-sm text-ink-muted">Real-time anomaly detection assist.</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button size="sm" onClick={runScan} disabled={scanning} icon={<MagnifyingGlass size={14} />}>
+            {scanning ? 'Scanning…' : 'Run Fraud Sweep'}
+          </Button>
           <Button variant="secondary" size="sm" icon={<Gear size={14} />}>
             Configuration
           </Button>
@@ -59,6 +83,7 @@ export default function Fraud() {
           </Button>
         </div>
       </div>
+      {scanError ? <p className="text-sm text-negative">{scanError}</p> : null}
 
       <div className="grid gap-4 sm:grid-cols-4">
         {[

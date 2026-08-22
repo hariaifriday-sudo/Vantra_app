@@ -70,11 +70,32 @@ async def act_on_alert(alert_id: int, payload: schemas.AmlActionRequest, agent: 
 
 @router.post("/scan", response_model=schemas.AmlScanResult)
 async def run_scan(agent: models.User = Depends(require_agent), db: Session = Depends(get_db)):
+    created, scanned = await scan_for_aml(db)
+
+    db.add(models.AuditLog(
+        actor_id=agent.id,
+        actor_label=agent.full_name,
+        action="aml_scan",
+        target_type="aml_alert",
+        target_id="sweep",
+        details=f"{len(created)} new alert(s) from {scanned} transactions scanned",
+    ))
+    db.commit()
+
+    return schemas.AmlScanResult(created=created, scanned_transactions=scanned)
+
+
+async def scan_for_aml(db: Session, holder_ids: list[int] | None = None) -> tuple[list[models.AmlAlert], int]:
     """Runs a real rules-based pass over transaction data: structuring
     (multiple sub-threshold transactions summing past the CTR threshold in a
     short window) and velocity (unusually many transactions in 24h). Creates
-    AmlAlert rows for newly-detected patterns; skips ones already flagged."""
-    holders = db.query(models.User).filter(models.User.role == "account_holder").all()
+    AmlAlert rows for newly-detected patterns; skips ones already flagged.
+    Scoped to `holder_ids` when given (e.g. a single account holder just
+    generated test activity), otherwise sweeps every account holder."""
+    query = db.query(models.User).filter(models.User.role == "account_holder")
+    if holder_ids is not None:
+        query = query.filter(models.User.id.in_(holder_ids))
+    holders = query.all()
     created: list[models.AmlAlert] = []
     scanned = 0
 
@@ -131,17 +152,7 @@ async def run_scan(agent: models.User = Depends(require_agent), db: Session = De
     for a in created:
         db.refresh(a)
 
-    db.add(models.AuditLog(
-        actor_id=agent.id,
-        actor_label=agent.full_name,
-        action="aml_scan",
-        target_type="aml_alert",
-        target_id="sweep",
-        details=f"{len(created)} new alert(s) from {scanned} transactions scanned",
-    ))
-    db.commit()
-
-    return schemas.AmlScanResult(created=created, scanned_transactions=scanned)
+    return created, scanned
 
 
 async def _create_alert_if_new(db: Session, holder: models.User, alert_type: str, volume: float, evidence_txns: list[models.TransactionRecord], summary: str):

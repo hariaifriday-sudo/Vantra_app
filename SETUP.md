@@ -65,7 +65,7 @@ Open `server/.env` and fill in:
 
 ```env
 GROQ_API_KEY=gsk_your_real_key_here
-GROQ_MODEL=qwen/qwen3.6-27b
+GROQ_MODEL=openai/gpt-oss-120b
 TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe   # Windows only — delete this line on macOS/Linux if tesseract is on PATH
 JWT_SECRET=<generate one below>
 JWT_ALGORITHM=HS256

@@ -71,6 +71,49 @@ class SavingsGoal(Base):
     owner: Mapped["User"] = relationship(back_populates="goals")
 
 
+class Beneficiary(Base):
+    __tablename__ = "beneficiaries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    name: Mapped[str] = mapped_column(String(255))
+    account_ref: Mapped[str] = mapped_column(String(64))
+    bank_name: Mapped[str] = mapped_column(String(255), default="Vantra Bank")
+    color: Mapped[str] = mapped_column(String(16), default="#e8b23d")
+    created_at: Mapped[datetime] = mapped_column(default=now_utc)
+
+
+class PendingTransfer(Base):
+    __tablename__ = "pending_transfers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    from_account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    beneficiary_id: Mapped[int | None] = mapped_column(ForeignKey("beneficiaries.id"), nullable=True)
+    to_label: Mapped[str] = mapped_column(String(255))
+    amount: Mapped[float] = mapped_column(Float)
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="awaiting_approval")  # awaiting_approval|approved|rejected
+    created_at: Mapped[datetime] = mapped_column(default=now_utc)
+    decided_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class ScheduledPayment(Base):
+    __tablename__ = "scheduled_payments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    from_account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    beneficiary_id: Mapped[int | None] = mapped_column(ForeignKey("beneficiaries.id"), nullable=True)
+    to_label: Mapped[str] = mapped_column(String(255))
+    amount: Mapped[float] = mapped_column(Float)
+    frequency: Mapped[str] = mapped_column(String(16), default="monthly")  # weekly|monthly
+    next_run_date: Mapped[datetime] = mapped_column()
+    status: Mapped[str] = mapped_column(String(16), default="active")  # active|paused|cancelled
+    created_at: Mapped[datetime] = mapped_column(default=now_utc)
+    last_run_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
 class Notification(Base):
     __tablename__ = "notifications"
 

@@ -1,14 +1,74 @@
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from .. import models, schemas
+from .. import actions, models, schemas
+from ..actions import ActionError
 from ..database import get_db
 from ..deps import get_current_user
 from ..llm import extract_document_fields
 from ..ocr import extract_text
+from ..security import decode_access_token
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
+
+
+def _user_from_query_token(token: str, db: Session) -> models.User:
+    """Auth via a query-string token instead of a header — needed because these
+    endpoints are opened as plain browser links (PDF download), which can't set
+    an Authorization header. Mirrors the pattern already used by /api/chat/stream."""
+    try:
+        payload = decode_access_token(token)
+        user = db.get(models.User, int(payload["sub"]))
+    except Exception:  # noqa: BLE001
+        user = None
+    if not user:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired link")
+    return user
+
+
+def _pdf_response(pdf_bytes: bytes, filename: str) -> Response:
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@router.get("/statement")
+def download_statement(
+    token: str,
+    account: str | None = Query(None, description="Account name to match, e.g. 'checking'"),
+    period: str = Query("last_30_days"),
+    db: Session = Depends(get_db),
+):
+    user = _user_from_query_token(token, db)
+    try:
+        pdf_bytes, filename = actions.generate_statement_pdf(db, user, account, period)
+    except ActionError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    return _pdf_response(pdf_bytes, filename)
+
+
+@router.get("/interest-certificate")
+def download_interest_certificate(token: str, year: int | None = None, db: Session = Depends(get_db)):
+    user = _user_from_query_token(token, db)
+    try:
+        pdf_bytes, filename = actions.generate_interest_certificate_pdf(db, user, year)
+    except ActionError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    return _pdf_response(pdf_bytes, filename)
+
+
+@router.get("/tax-certificate")
+def download_tax_certificate(token: str, year: int | None = None, db: Session = Depends(get_db)):
+    user = _user_from_query_token(token, db)
+    try:
+        pdf_bytes, filename = actions.generate_tax_certificate_pdf(db, user, year)
+    except ActionError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    return _pdf_response(pdf_bytes, filename)
 
 KYC_FIELD_HINT = "full name, date of birth, residential address, government ID number, nationality, occupation"
 LOAN_FIELD_HINT = "business or applicant name, tax ID or EIN, annual revenue, requested loan amount, collateral description"

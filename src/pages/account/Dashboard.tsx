@@ -25,6 +25,7 @@ import { AssistantOrb } from '@/components/assistant/AssistantOrb'
 import { cn, formatCurrency } from '@/lib/utils'
 import { quickPayees } from '@/data/mock'
 import { api, type DashboardSummary, type ForecastOut, type InsightOut } from '@/lib/api'
+import { useDataRefresh } from '@/lib/refresh'
 
 const actions = [
   { label: 'Transfer', icon: ArrowsLeftRight, to: '/app/transfers' },
@@ -55,7 +56,7 @@ export default function Dashboard() {
   const [forecast, setForecast] = useState<ForecastOut | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  function loadCore() {
     Promise.all([
       api.get<DashboardSummary>('/api/accounts/dashboard'),
       api.get<TrendPoint[]>('/api/accounts/trend'),
@@ -67,12 +68,18 @@ export default function Dashboard() {
         setExpenses(e)
       })
       .catch(() => setError("Couldn't load your dashboard. Please refresh."))
-
-    // Fetched separately: these two make their own live LLM calls and
-    // shouldn't block the core dashboard numbers from rendering.
-    api.get<InsightOut>('/api/accounts/insights').then(setInsight).catch(() => {})
     api.get<ForecastOut>('/api/accounts/forecast').then(setForecast).catch(() => {})
+  }
+
+  useEffect(() => {
+    loadCore()
+    // Insight is fetched once, not on every refresh: it makes its own live LLM
+    // call and is cached server-side for the week, so re-requesting it on every
+    // chat-driven refresh would be wasted latency for a number that won't have changed.
+    api.get<InsightOut>('/api/accounts/insights').then(setInsight).catch(() => {})
   }, [])
+
+  useDataRefresh(loadCore)
 
   if (error) return <p className="p-6 text-sm text-negative">{error}</p>
   if (!summary) return <DashboardSkeleton />
@@ -83,13 +90,13 @@ export default function Dashboard() {
     <div className="space-y-6 pb-6">
       <StaggerGroup className="grid gap-4 sm:grid-cols-3">
         <StaggerItem>
-          <StatTile label="Total Balance" value={formatCurrency(summary.total_balance)} tint="mint" period="All accounts" />
+          <StatTile label="Total Balance" value={formatCurrency(summary.total_balance)} numericValue={summary.total_balance} tint="mint" period="All accounts" />
         </StaggerItem>
         <StaggerItem>
-          <StatTile label="Income" value={formatCurrency(summary.income_month)} period="Last 30 days" />
+          <StatTile label="Income" value={formatCurrency(summary.income_month)} numericValue={summary.income_month} period="Last 30 days" />
         </StaggerItem>
         <StaggerItem>
-          <StatTile label="Expenses" value={formatCurrency(summary.expenses_month)} period="Last 30 days" />
+          <StatTile label="Expenses" value={formatCurrency(summary.expenses_month)} numericValue={summary.expenses_month} period="Last 30 days" />
         </StaggerItem>
       </StaggerGroup>
 

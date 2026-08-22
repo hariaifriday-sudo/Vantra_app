@@ -1,9 +1,87 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Microphone, PaperPlaneTilt, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react'
+import { Check, Microphone, PaperPlaneTilt, SpeakerHigh, SpeakerSlash, X } from '@phosphor-icons/react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { AssistantOrb } from './AssistantOrb'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
+import { emitDataChanged } from '@/lib/refresh'
+
+interface PendingTransferBlock {
+  pending_transfer_id: number
+  to: string
+  amount: number
+  from_account: string
+}
+
+const APPROVAL_BLOCK_RE = /```vantra:approve-transfer\n([\s\S]*?)\n```/
+
+function extractApprovalBlock(text: string): { cleanText: string; approval: PendingTransferBlock | null } {
+  const match = text.match(APPROVAL_BLOCK_RE)
+  if (!match) return { cleanText: text, approval: null }
+  try {
+    const approval = JSON.parse(match[1]) as PendingTransferBlock
+    return { cleanText: text.slice(0, match.index).trimEnd(), approval }
+  } catch {
+    return { cleanText: text, approval: null }
+  }
+}
+
+function TransferApprovalCard({ transfer, dark }: { transfer: PendingTransferBlock; dark: boolean }) {
+  const [status, setStatus] = useState<'awaiting' | 'working' | 'approved' | 'rejected' | 'error'>('awaiting')
+
+  async function decide(decision: 'approve' | 'reject') {
+    setStatus('working')
+    try {
+      await api.post(`/api/banking/transfers/pending/${transfer.pending_transfer_id}/${decision}`)
+      setStatus(decision === 'approve' ? 'approved' : 'rejected')
+      if (decision === 'approve') emitDataChanged()
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  return (
+    <div className={cn('mt-2 w-full rounded-xl border p-3 text-sm', dark ? 'border-white/10 bg-white/[0.04]' : 'border-border-hair bg-paper')}>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="font-semibold">Transfer to {transfer.to}</span>
+        <span className="font-display text-base font-semibold">${transfer.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+      </div>
+      <p className="mt-0.5 text-xs text-ink-muted">From {transfer.from_account}</p>
+
+      {status === 'awaiting' || status === 'working' ? (
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={() => decide('approve')}
+            disabled={status === 'working'}
+            className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-accent-ink transition-transform active:scale-95 disabled:opacity-50"
+          >
+            <Check size={14} weight="bold" /> Approve
+          </button>
+          <button
+            onClick={() => decide('reject')}
+            disabled={status === 'working'}
+            className={cn(
+              'flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-transform active:scale-95 disabled:opacity-50',
+              dark ? 'border-white/15 text-white/80' : 'border-border-hair text-ink-muted',
+            )}
+          >
+            <X size={14} weight="bold" /> Reject
+          </button>
+        </div>
+      ) : status === 'approved' ? (
+        <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+          <Check size={14} weight="bold" /> Approved — transfer complete
+        </p>
+      ) : status === 'rejected' ? (
+        <p className="mt-3 text-xs font-semibold text-ink-muted">Rejected — no money moved.</p>
+      ) : (
+        <p className="mt-3 text-xs font-semibold text-red-500">Something went wrong — try again from the app.</p>
+      )}
+    </div>
+  )
+}
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
@@ -45,6 +123,43 @@ async function streamAssistantReply(
     if (done) break
     onToken(decoder.decode(value, { stream: true }))
   }
+}
+
+function MarkdownMessage({ text, dark }: { text: string; dark: boolean }) {
+  return (
+    <div
+      className={cn(
+        'space-y-2 text-sm leading-relaxed [&_p]:m-0',
+        '[&_strong]:font-semibold',
+        '[&_ul]:m-0 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-4',
+        '[&_ol]:m-0 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-4',
+        '[&_code]:rounded [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs',
+        dark ? '[&_code]:bg-white/10' : '[&_code]:bg-black/5',
+      )}
+    >
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a: ({ ...props }) => (
+            // eslint-disable-next-line jsx-a11y/anchor-has-content
+            <a {...props} target="_blank" rel="noreferrer" className="underline underline-offset-2" />
+          ),
+          table: ({ ...props }) => (
+            <div className="my-1 overflow-x-auto rounded-lg border border-border-hair">
+              <table {...props} className="w-full border-collapse text-xs" />
+            </div>
+          ),
+          thead: ({ ...props }) => <thead {...props} className={cn(dark ? 'bg-white/[0.08]' : 'bg-black/5')} />,
+          th: ({ ...props }) => <th {...props} className="whitespace-nowrap px-2.5 py-1.5 text-left font-semibold" />,
+          td: ({ ...props }) => (
+            <td {...props} className={cn('whitespace-nowrap border-t px-2.5 py-1.5', dark ? 'border-white/10' : 'border-border-hair')} />
+          ),
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  )
 }
 
 export function ChatPanel({
@@ -102,6 +217,10 @@ export function ChatPanel({
         window.speechSynthesis.cancel()
         window.speechSynthesis.speak(new SpeechSynthesisUtterance(fullReply))
       }
+      // The assistant can create/update/delete goals and schedule auto-payments
+      // directly (no separate approval step), so any account-context reply may
+      // have changed data other pages are showing — have them refetch.
+      if (context === 'account') emitDataChanged()
     } catch {
       setMessages((m) => {
         const next = [...m]
@@ -184,19 +303,33 @@ export function ChatPanel({
                 {m.role === 'assistant' ? <AssistantOrb size={22} className="mt-1 shrink-0" /> : null}
                 <div
                   className={cn(
-                    'rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap',
+                    'max-w-full rounded-2xl px-4 py-2.5 text-sm leading-relaxed',
                     m.role === 'user'
-                      ? 'rounded-tr-sm bg-accent text-accent-ink'
+                      ? 'rounded-tr-sm whitespace-pre-wrap bg-accent text-accent-ink'
                       : cn('rounded-tl-sm', dark ? 'bg-white/[0.06] text-[#f2f3f5]' : 'bg-surface-2 text-ink'),
                   )}
                 >
-                  {m.text || (m.role === 'assistant' && streaming && i === messages.length - 1 ? (
+                  {m.text ? (
+                    m.role === 'assistant' ? (
+                      (() => {
+                        const { cleanText, approval } = extractApprovalBlock(m.text)
+                        return (
+                          <>
+                            <MarkdownMessage text={cleanText} dark={dark} />
+                            {approval ? <TransferApprovalCard transfer={approval} dark={dark} /> : null}
+                          </>
+                        )
+                      })()
+                    ) : (
+                      m.text
+                    )
+                  ) : m.role === 'assistant' && streaming && i === messages.length - 1 ? (
                     <span className="inline-flex gap-1">
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current opacity-60 [animation-delay:0ms]" />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current opacity-60 [animation-delay:150ms]" />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current opacity-60 [animation-delay:300ms]" />
                     </span>
-                  ) : null)}
+                  ) : null}
                 </div>
               </div>
             </motion.div>

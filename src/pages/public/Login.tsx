@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Eye, EyeSlash, LockKey, User, Buildings, WarningCircle } from '@phosphor-icons/react'
 import { VantraLogo } from '@/components/layout/VantraLogo'
 import { Button } from '@/components/ui/Button'
@@ -9,6 +9,29 @@ import { useAuth } from '@/lib/auth'
 import { ApiError } from '@/lib/api'
 
 type Role = 'holder' | 'agent'
+
+// A field (or group) that mounts/unmounts with the form mode — grows into place
+// instead of shoving the fields below it. Height is one of the few properties
+// worth animating despite the layout cost: there's no transform equivalent for
+// "make room", and these are rare, occasional transitions, not a hot loop.
+function FieldReveal({ show, children }: { show: boolean; children: ReactNode }) {
+  const reduce = useReducedMotion()
+  return (
+    <AnimatePresence initial={false}>
+      {show ? (
+        <motion.div
+          initial={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
+          animate={reduce ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
+          exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
+          transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+          className="overflow-hidden"
+        >
+          {children}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  )
+}
 
 export default function Login() {
   const [role, setRole] = useState<Role>('holder')
@@ -26,6 +49,8 @@ export default function Login() {
   const { login, signup } = useAuth()
   const navigate = useNavigate()
   const dark = role === 'agent'
+  const reduce = useReducedMotion()
+  const pillTransition = reduce ? { duration: 0.15 } : { type: 'spring' as const, stiffness: 500, damping: 34 }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -86,16 +111,22 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setRole('holder')}
-                className={cn('flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-sm font-medium transition-colors', role === 'holder' ? 'bg-accent text-accent-ink' : 'text-ink-muted')}
+                className={cn('relative flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-sm font-medium transition-colors duration-200', role === 'holder' ? 'text-accent-ink' : 'text-ink-muted')}
               >
-                <User size={15} /> Account Holder
+                {role === 'holder' ? (
+                  <motion.span layoutId="login-role-pill" className="absolute inset-0 rounded-full bg-accent" transition={pillTransition} />
+                ) : null}
+                <User size={15} className="relative z-10" /> <span className="relative z-10">Account Holder</span>
               </button>
               <button
                 type="button"
                 onClick={() => setRole('agent')}
-                className={cn('flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-sm font-medium transition-colors', role === 'agent' ? 'bg-accent text-accent-ink' : 'text-ink-muted')}
+                className={cn('relative flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-sm font-medium transition-colors duration-200', role === 'agent' ? 'text-accent-ink' : 'text-ink-muted')}
               >
-                <Buildings size={15} /> Bank Agent
+                {role === 'agent' ? (
+                  <motion.span layoutId="login-role-pill" className="absolute inset-0 rounded-full bg-accent" transition={pillTransition} />
+                ) : null}
+                <Buildings size={15} className="relative z-10" /> <span className="relative z-10">Bank Agent</span>
               </button>
             </div>
           ) : null}
@@ -106,21 +137,21 @@ export default function Login() {
           </p>
 
           <form onSubmit={submit} className="mt-7 space-y-4">
-            {signupMode ? (
+            <FieldReveal show={signupMode}>
               <div>
                 <label htmlFor="fullName" className="mb-1.5 block text-xs font-semibold text-ink-muted">
                   Full name
                 </label>
                 <input
                   id="fullName"
-                  required
+                  required={signupMode}
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   className="w-full rounded-xl border border-border-hair bg-surface px-4 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   placeholder="Jordan Lee"
                 />
               </div>
-            ) : null}
+            </FieldReveal>
 
             <div>
               <label htmlFor="email" className="mb-1.5 block text-xs font-semibold text-ink-muted">
@@ -138,7 +169,7 @@ export default function Login() {
               />
             </div>
 
-            {role === 'agent' && !signupMode ? (
+            <FieldReveal show={role === 'agent' && !signupMode}>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label htmlFor="empId" className="mb-1.5 block text-xs font-semibold text-ink-muted">
@@ -169,7 +200,7 @@ export default function Login() {
                   </select>
                 </div>
               </div>
-            ) : null}
+            </FieldReveal>
 
             <div>
               <div className="mb-1.5 flex items-center justify-between">
@@ -205,7 +236,7 @@ export default function Login() {
               </div>
             </div>
 
-            {signupMode ? (
+            <FieldReveal show={signupMode}>
               <div>
                 <label htmlFor="confirmPassword" className="mb-1.5 block text-xs font-semibold text-ink-muted">
                   Confirm password
@@ -213,14 +244,14 @@ export default function Login() {
                 <input
                   id="confirmPassword"
                   type={showPassword ? 'text' : 'password'}
-                  required
+                  required={signupMode}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full rounded-xl border border-border-hair bg-surface px-4 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   placeholder="••••••••"
                 />
               </div>
-            ) : null}
+            </FieldReveal>
 
             {!signupMode && role === 'holder' ? (
               <label className="flex items-center gap-2 text-xs text-ink-muted">
@@ -229,12 +260,12 @@ export default function Login() {
               </label>
             ) : null}
 
-            {error ? (
+            <FieldReveal show={error !== null}>
               <div className="flex items-start gap-2 rounded-xl bg-negative/10 px-3.5 py-2.5 text-sm text-negative">
                 <WarningCircle size={16} weight="fill" className="mt-0.5 shrink-0" />
                 {error}
               </div>
-            ) : null}
+            </FieldReveal>
 
             <Button type="submit" className="w-full" size="lg" disabled={loading}>
               {loading ? 'Please wait…' : signupMode ? 'Create Account' : 'Log In'}

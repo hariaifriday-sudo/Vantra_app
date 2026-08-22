@@ -7,11 +7,14 @@ fields (the image itself is read locally by Tesseract — see app/ocr.py —
 since this Groq account has no vision-capable model available).
 """
 import json
-from typing import AsyncGenerator, Optional
+from typing import Any, Awaitable, Callable, Optional
+from typing import AsyncGenerator
 
 from openai import AsyncOpenAI
 
 from .config import settings
+
+ToolExecutor = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
 
 client = AsyncOpenAI(
     api_key=settings.groq_api_key or "not-set",
@@ -38,6 +41,8 @@ async def stream_chat(
             messages=full_messages,
             temperature=temperature,
             stream=True,
+            max_tokens=1024,
+            extra_body={"reasoning_effort": "medium"},
         )
         async for chunk in stream:
             delta = chunk.choices[0].delta.content if chunk.choices else None
@@ -71,6 +76,65 @@ async def stream_chat(
 
         if buffer and not in_think:
             yield buffer
+    except Exception as exc:  # noqa: BLE001 - surface upstream failure to the client stream
+        yield f"\n\n_(Assistant is temporarily unavailable: {exc})_"
+
+
+async def stream_chat_with_tools(
+    messages: list[dict[str, str]],
+    system_prompt: str,
+    tools: list[dict[str, Any]],
+    executor: ToolExecutor,
+    temperature: float = 0.4,
+    max_rounds: int = 4,
+) -> AsyncGenerator[str, None]:
+    """Runs a tool-calling loop (non-streaming, since Groq's streamed tool-call
+    deltas are painful to reassemble reliably) and yields the final natural-language
+    answer once the model stops requesting tools. `executor` runs one tool call
+    server-side and returns a JSON-able result dict."""
+    full_messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}, *messages]
+
+    try:
+        for _ in range(max_rounds):
+            response = await client.chat.completions.create(
+                model=settings.groq_model,
+                messages=full_messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=temperature,
+                max_tokens=1024,
+                extra_body={"reasoning_effort": "medium"},
+            )
+            msg = response.choices[0].message
+
+            if not msg.tool_calls:
+                yield _strip_think(msg.content or "").strip()
+                return
+
+            full_messages.append({
+                "role": "assistant",
+                "content": msg.content,
+                "tool_calls": [
+                    {"id": tc.id, "type": "function", "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in msg.tool_calls
+                ],
+            })
+            for tc in msg.tool_calls:
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                try:
+                    result = await executor(tc.function.name, args)
+                except Exception as exc:  # noqa: BLE001
+                    result = {"error": str(exc)}
+                full_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": json.dumps(result, default=str),
+                })
+
+        yield "I wasn't able to finish that in time — could you try rephrasing or breaking it into a smaller request?"
     except Exception as exc:  # noqa: BLE001 - surface upstream failure to the client stream
         yield f"\n\n_(Assistant is temporarily unavailable: {exc})_"
 

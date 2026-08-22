@@ -37,7 +37,7 @@ export function Button({
     <button
       className={cn(
         'inline-flex cursor-pointer items-center justify-center rounded-full font-medium',
-        'transition-all duration-200 ease-out active:scale-[0.97]',
+        'transition-[transform,background-color,filter,box-shadow] duration-150 [transition-timing-function:var(--ease-out)] active:scale-[0.97]',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-paper',
         'disabled:pointer-events-none disabled:opacity-50',
         variants[variant],

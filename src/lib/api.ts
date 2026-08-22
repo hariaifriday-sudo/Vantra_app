@@ -154,6 +154,11 @@ export interface FraudAlertOut {
   created_at: string
 }
 
+export interface FraudScanResult {
+  created: FraudAlertOut[]
+  scanned_transactions: number
+}
+
 export interface AmlAlertOut {
   id: number
   entity_name: string
@@ -221,4 +226,11 @@ export interface AccountMatch {
   name: string
   account_ref: string
   match: number
+}
+
+export interface SimulateTransactionsResult {
+  scenario: string
+  pattern: string
+  transactions_created: number
+  alerts_created: { type?: string; rule?: string; risk?: string; volume?: number; amount?: number }[]
 }

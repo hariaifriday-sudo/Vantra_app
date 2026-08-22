@@ -84,6 +84,85 @@ class TransferRequest(BaseModel):
     amount: float = Field(gt=0)
 
 
+class SavingsGoalCreate(BaseModel):
+    name: str
+    target: float = Field(gt=0)
+    saved: float = 0.0
+    due_by: str = "Ongoing"
+    icon: str = "target"
+
+
+class SavingsGoalUpdate(BaseModel):
+    name: Optional[str] = None
+    target: Optional[float] = Field(default=None, gt=0)
+    saved: Optional[float] = None
+    due_by: Optional[str] = None
+
+
+# ---- Beneficiaries / transfers / auto payments ----
+
+class BeneficiaryOut(BaseModel):
+    id: int
+    name: str
+    account_ref: str
+    bank_name: str
+    color: str
+
+    class Config:
+        from_attributes = True
+
+
+class BeneficiaryCreate(BaseModel):
+    name: str
+    account_ref: str
+    bank_name: str = "Vantra Bank"
+
+
+class PendingTransferOut(BaseModel):
+    id: int
+    from_account_id: int
+    to_label: str
+    amount: float
+    note: Optional[str] = None
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ScheduledPaymentOut(BaseModel):
+    id: int
+    from_account_id: int
+    to_label: str
+    amount: float
+    frequency: str
+    next_run_date: datetime
+    status: str
+
+    class Config:
+        from_attributes = True
+
+
+class ScheduledPaymentCreate(BaseModel):
+    from_account_id: int
+    to_label: str
+    amount: float = Field(gt=0)
+    frequency: Literal["weekly", "monthly"] = "monthly"
+    start_date: Optional[datetime] = None
+
+
+class SimulateTransactionsRequest(BaseModel):
+    scenario: Literal["regular", "aml", "fraud"]
+
+
+class SimulateTransactionsResult(BaseModel):
+    scenario: str
+    pattern: str
+    transactions_created: int
+    alerts_created: list[dict[str, Any]]
+
+
 class DashboardSummary(BaseModel):
     accounts: list[AccountOut]
     transactions: list[TransactionOut]
@@ -186,6 +265,11 @@ class FraudAlertOut(BaseModel):
 class FraudActionRequest(BaseModel):
     action: Literal["confirm_fraud", "dismiss", "escalate"]
     notes: Optional[str] = None
+
+
+class FraudScanResult(BaseModel):
+    created: list[FraudAlertOut]
+    scanned_transactions: int
 
 
 # ---- AML ----
