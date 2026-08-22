@@ -12,6 +12,7 @@ import { SectionReveal } from '@/components/ui/SectionReveal'
 import { cn, formatCurrency } from '@/lib/utils'
 import { amlAnomalyTrend, amlFlagCategories, amlFrameworkCoverage } from '@/data/mock'
 import { api, ApiError, type AmlAlertOut, type AmlScanResult } from '@/lib/api'
+import { RuleConfigPanel } from '@/components/agent/RuleConfigPanel'
 
 const statusTone: Record<string, 'negative' | 'watch' | 'accent' | 'neutral'> = {
   Open: 'negative',
@@ -31,6 +32,7 @@ export default function Aml() {
   const [acting, setActing] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
+  const [showConfig, setShowConfig] = useState(false)
 
   useEffect(() => {
     api.get<AmlAlertOut[]>('/api/aml/alerts').then(setAlerts)
@@ -90,7 +92,7 @@ export default function Aml() {
           <Button size="sm" onClick={runScan} disabled={scanning} icon={<MagnifyingGlass size={14} />}>
             {scanning ? 'Scanning…' : 'Run AML Sweep'}
           </Button>
-          <Button variant="secondary" size="sm" icon={<Gear size={14} />}>
+          <Button variant="secondary" size="sm" icon={<Gear size={14} />} onClick={() => setShowConfig(true)}>
             Configuration
           </Button>
           <Button variant="secondary" size="sm" icon={<DownloadSimple size={14} />}>
@@ -304,6 +306,8 @@ export default function Aml() {
           </motion.div>
         ) : null}
       </AnimatePresence>
+
+      <AnimatePresence>{showConfig ? <RuleConfigPanel domain="aml" onClose={() => setShowConfig(false)} /> : null}</AnimatePresence>
     </div>
   )
 }

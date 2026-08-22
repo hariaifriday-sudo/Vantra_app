@@ -252,7 +252,10 @@ class FraudAlertOut(BaseModel):
     amount: float
     merchant: str
     rule: str
+    rule_type: Optional[str] = None
     risk: str
+    risk_score: int = 0
+    linked_case_id: Optional[str] = None
     status: str
     ai_explanation: Optional[str]
     agent_notes: Optional[str] = None
@@ -278,6 +281,7 @@ class AmlAlertOut(BaseModel):
     id: int
     entity_name: str
     alert_type: str
+    rule_type: Optional[str] = None
     volume: float
     status: str
     narrative: Optional[str]
@@ -286,6 +290,8 @@ class AmlAlertOut(BaseModel):
     agent_notes: Optional[str] = None
     source: str = "seed"
     case_ref: str
+    risk_score: int = 0
+    linked_case_id: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -300,6 +306,35 @@ class AmlActionRequest(BaseModel):
 class AmlScanResult(BaseModel):
     created: list[AmlAlertOut]
     scanned_transactions: int
+
+
+# ---- Detection rules (AML + Fraud configuration) ----
+
+class DetectionRuleOut(BaseModel):
+    id: int
+    domain: str
+    rule_type: str
+    label: str
+    params: dict[str, Any]
+    enabled: bool
+    is_default: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class DetectionRuleCreate(BaseModel):
+    rule_type: str
+    label: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+class DetectionRuleUpdate(BaseModel):
+    label: Optional[str] = None
+    params: Optional[dict[str, Any]] = None
+    enabled: Optional[bool] = None
 
 
 # ---- Cases ----
@@ -404,6 +439,39 @@ class ChatMessageOut(BaseModel):
     role: str
     content: str
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ---- Public assistant (branches, appointments) ----
+
+class BranchOut(BaseModel):
+    name: str
+    address: str
+    city: str
+    phone: str
+    hours: str
+    maps_url: str
+
+
+class AppointmentRequest(BaseModel):
+    name: str
+    email: EmailStr
+    phone: Optional[str] = None
+    branch_name: str
+    preferred_date: str
+    preferred_time: str
+    reason: Optional[str] = None
+
+
+class AppointmentOut(BaseModel):
+    reference: str
+    name: str
+    branch_name: str
+    preferred_date: str
+    preferred_time: str
+    status: str
 
     class Config:
         from_attributes = True

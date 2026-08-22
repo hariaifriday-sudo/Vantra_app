@@ -42,6 +42,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
+  patch: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   postForm: <T>(path: string, form: FormData) => request<T>(path, { method: 'POST', body: form }),
   token: {
     get: getToken,
@@ -233,4 +235,43 @@ export interface SimulateTransactionsResult {
   pattern: string
   transactions_created: number
   alerts_created: { type?: string; rule?: string; risk?: string; volume?: number; amount?: number }[]
+}
+
+export interface BranchOut {
+  name: string
+  address: string
+  city: string
+  phone: string
+  hours: string
+  maps_url: string
+}
+
+export interface AppointmentRequest {
+  name: string
+  email: string
+  phone?: string
+  branch_name: string
+  preferred_date: string
+  preferred_time: string
+  reason?: string
+}
+
+export interface AppointmentOut {
+  reference: string
+  name: string
+  branch_name: string
+  preferred_date: string
+  preferred_time: string
+  status: string
+}
+
+export interface DetectionRuleOut {
+  id: number
+  domain: 'aml' | 'fraud'
+  rule_type: string
+  label: string
+  params: Record<string, number | string>
+  enabled: boolean
+  is_default: boolean
+  created_at: string
 }

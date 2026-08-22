@@ -9,7 +9,9 @@ underwriting. Full-stack — real database, real auth, real LLM calls.
 
 - **Frontend** — React + TypeScript + Vite, Tailwind v4, Framer Motion + GSAP,
   Recharts, Phosphor icons. Two visual modes (light for customers, dark for
-  agents) sharing one design-token system.
+  agents) sharing one design-token system. The landing page hero is a real
+  AI-generated video (cards settling into a wallet) scroll-scrubbed with
+  GSAP `ScrollTrigger` — not a canned autoplay clip.
 - **Backend** — FastAPI + SQLAlchemy + SQLite, JWT auth (bcrypt-hashed
   passwords), Groq (`openai/gpt-oss-120b`) for chat/summarization/structured
   analysis, Tesseract OCR + Groq text model for document field extraction.
@@ -63,6 +65,22 @@ Runs at `http://localhost:5173`, talking to the backend at
 
 New account holders can also sign up from the login page.
 
+## Feature docs
+
+Deep dives on the five biggest features, each covering how it works,
+what's real vs. simplified, and how to test it:
+
+- [FAQ Assistant](docs/FAQ_ASSISTANT.md) — public chat, branch lookup,
+  appointment booking, human escalation
+- [KYC Verification](docs/KYC_VERIFICATION.md) — upload → OCR → LLM →
+  signature → agent review
+- [AML Detection](docs/AML_DETECTION.md) — 8-rule engine, risk scoring,
+  case linking, ring detection
+- [Fraud Detection](docs/FRAUD_DETECTION.md) — 10-rule engine, risk scoring,
+  known-bad-merchant feedback loop
+- [Chatbot Experience](docs/CHATBOT_EXPERIENCE.md) — the shared chat
+  architecture behind all three assistants
+
 ## What's real vs. illustrative
 
 Real, backed by the database and live LLM calls: auth, accounts/transactions/
@@ -85,37 +103,69 @@ Also real, added in a second pass:
   straight into the agent's Fraud queue (`POST /api/cases/dispute`).
 - **Spoken assistant replies** — a speaker toggle in any chat panel using the
   browser's built-in text-to-speech (no backend involved).
-- **Real rules-based AML detection** (`POST /api/aml/scan`) — scans actual
-  transaction data for structuring (sub-threshold transactions summing past
-  the CTR threshold in a rolling window) and velocity/rapid-fund-movement
-  patterns, and creates real `AmlAlert` rows with an LLM-written narrative
-  grounded in the specific transactions found. Two seeded accounts (Nadia
-  Kowalczyk, Halden Import Group) carry deliberately suspicious transaction
-  patterns so the sweep has something real to find. Alerts it creates are
-  tagged "Live" in the UI to distinguish them from the illustrative seeded
-  ones.
-- **RAG-grounded Agent Copilot** — every Copilot message runs a TF-IDF
-  similarity search (`app/rag.py`) over the policy library first, and the
-  system prompt is built from the actual retrieved excerpts, so answers cite
-  real policy text instead of general knowledge. (No embeddings API was
-  available on this Groq account, so this uses local lexical similarity
-  rather than dense vectors — swap in a real embedding model if the policy
-  corpus grows past a few dozen documents.)
-- **SAR draft generation** — "File SAR Draft" on an AML alert now has the
-  LLM write an actual filing narrative from the alert's evidence, shown in
-  the drawer for compliance to review.
-- **Underwriting counterfactuals** — "Regenerate AI Analysis" asks the LLM
-  what specific change would move an applicant to a better risk grade.
-- **Agent override notes** — fraud and AML action drawers now accept an
-  optional note, persisted on the alert and in the audit log.
 - **AI transparency page** at `/trust`, linked from the footer.
+
+### AML detection engine (`POST /api/aml/scan`)
+
+A real, configurable rules engine over actual transaction data — not a demo
+stub. Eight rule types: `structuring`, `velocity`, `round_number`,
+`pass_through`, `dormant_reactivation`, `velocity_baseline` (each holder's
+own adaptive spending baseline, not a fixed threshold), `sanctions_match`
+(country/watchlist), and `coordinated_structuring` (a holder-independent
+pass that flags coordinated rings — the same pattern tripping across
+multiple *different* holders within a time window). Alerts get a composite
+`risk_score` (summed severity across every distinct rule type triggered for
+that holder) and share a `linked_case_id` with other alerts on the same
+holder within a 7-day window, so a case grows and re-scores itself as more
+signals come in. Every rule's thresholds are live-editable — view, add,
+edit, or disable rules from **Configuration** on the AML page, no code
+change needed. Two seeded accounts (Nadia Kowalczyk, Halden Import Group)
+carry deliberately suspicious patterns so the sweep has something real to
+find; alerts it creates are tagged "Live" to distinguish them from the
+illustrative seeded ones. The Agent Copilot chat is grounded in the real
+open-alert queue, not a canned answer.
+
+### Fraud detection engine (`POST /api/fraud/scan`)
+
+The same architecture as AML, built in parallel. Ten rule types:
+`geo_mismatch`, `velocity` (card-testing bursts), `amount_outlier`,
+`impossible_travel`, `duplicate_charge`, `new_beneficiary_transfer`,
+`new_payee_burst`, `off_hours_anomaly`, `new_category_spike`, and
+`known_bad_merchant` — a feedback loop where confirming an alert as fraud
+automatically blocklists that merchant for every future customer, not just
+the one case. Same composite risk scoring and case-linking as AML, and the
+same live rule **Configuration** panel on the Fraud page.
+
+### Chat assistants — real tool-calling, not just Q&A
+
+Both chat surfaces can take real actions (OpenAI-style function calling),
+not just describe what to do:
+
+- **Account holder chat** (any `/app/*` page): create/update/delete savings
+  goals, calculate a savings plan, list beneficiaries, stage a transfer for
+  in-app approval (`propose_transfer` — never moves money itself), schedule
+  or cancel a recurring auto-payment, generate a PDF statement / interest
+  certificate / tax certificate (real download links, never a URL the model
+  invented), and generate realistic test transactions for a regular/AML/
+  fraud scenario — which immediately runs the real detection engines above
+  so a resulting alert shows up for agents right away. Also on the account
+  holder side: dedicated **Simulate** buttons (regular/AML/fraud) on the
+  Accounts page do the same thing without going through chat.
+- **Public FAQ assistant** (`/assistant`, no login required): finds real
+  branch locations with a Google-Maps link (address/hours/link are built
+  server-side, never hallucinated), stages a branch-appointment booking form
+  pre-filled from whatever's already in the conversation (name, branch,
+  date/time, reason — inferred from natural language like "tomorrow
+  afternoon"), and escalates to a human by opening a real support ticket in
+  the agent's Case Inbox. The FAQ tab has a real search box and written
+  Q&A content (not just category counts), a "you might also ask" strip that
+  tracks what's actually been asked, and the conversation persists across a
+  page reload.
 
 Illustrative only (no dedicated backend model yet): the AML page's anomaly
 trend / flag-rate / framework-coverage charts still render from static
-sample data (`src/data/mock.ts`) — a full anomaly-scoring model (as opposed
-to the two rule-based checks above) was out of scope. The public FAQ page's
-category/product browsing panel and loan calculator are also static content,
-not DB-backed.
+sample data (`src/data/mock.ts`). The public FAQ page's product-offer list
+and loan calculator are static content, not DB-backed.
 
 ## Known follow-ups
 

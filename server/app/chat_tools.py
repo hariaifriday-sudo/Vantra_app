@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from . import actions, models
+from . import actions, branches as branch_data, models
 from .actions import ActionError
 
 def _tool(name: str, description: str, properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
@@ -221,6 +221,100 @@ def build_executor(db: Session, user: models.User, token: str, api_base: str, ar
             return {"error": f"Unknown tool '{name}'"}
         except ActionError as exc:
             return {"error": str(exc)}
+        except (KeyError, TypeError, ValueError) as exc:
+            return {"error": f"Invalid arguments: {exc}"}
+
+    return execute
+
+
+# ---- Public FAQ assistant tools (unauthenticated — no account/user data) ----
+
+FAQ_TOOLS: list[dict[str, Any]] = [
+    _tool(
+        "find_nearest_branch",
+        "Finds Vantra branch locations, with address, phone, hours, and a Google Maps link. "
+        "Call whenever the customer asks about a branch, ATM, or wants to visit in person.",
+        {"location": {"type": "string", "description": "city, neighborhood, or zip the customer mentioned; omit to list all branches"}},
+    ),
+    _tool(
+        "propose_appointment_booking",
+        "Stages an appointment-booking form, pre-filled with anything you can already tell from the "
+        "conversation — does not book anything by itself. Call as soon as the customer wants to book "
+        "or schedule a branch visit. Pass an empty string for any field you don't know; never guess. "
+        "The form itself lets them fill in or correct whatever you didn't pre-fill.",
+        {
+            "name": {"type": "string", "description": "customer's name if they've given it; empty string otherwise"},
+            "email": {"type": "string", "description": "customer's email if they've given it; empty string otherwise"},
+            "branch_name": {"type": "string", "description": "exact branch name if mentioned or implied (e.g. by a city already discussed); empty string otherwise"},
+            "preferred_date": {"type": "string", "description": "YYYY-MM-DD if mentioned/inferable from today's date; empty string otherwise"},
+            "preferred_time": {"type": "string", "description": "one of: 9:00 AM, 10:00 AM, 11:00 AM, 1:00 PM, 2:00 PM, 3:00 PM, 4:00 PM — closest match to what they said; empty string otherwise"},
+            "reason": {"type": "string", "description": "why they're visiting, if mentioned or clearly implied by the conversation; empty string otherwise"},
+        },
+        ["name", "email", "branch_name", "preferred_date", "preferred_time", "reason"],
+    ),
+    _tool(
+        "escalate_to_human",
+        "Opens a support ticket for a human agent to follow up by email. Call when the customer "
+        "explicitly asks to talk to a person, or when their issue is outside what you can resolve "
+        "in chat (e.g. a specific account action while not logged in).",
+        {"email": {"type": "string"}, "message": {"type": "string", "description": "summary of what they need help with"}},
+        ["email", "message"],
+    ),
+]
+
+
+def build_faq_executor(db: Session, artifacts: dict[str, list]):
+    """Same artifact-recording pattern as build_executor above, but for the
+    unauthenticated public assistant — no user/account context available."""
+
+    async def execute(name: str, args: dict[str, Any]) -> dict:
+        try:
+            if name == "find_nearest_branch":
+                results = branch_data.find_branches(args.get("location"))
+                artifacts["branches"] = results
+                return {"branches": results, "note": "Branch details are shown to the customer automatically — don't re-type the address or link."}
+
+            if name == "propose_appointment_booking":
+                valid_times = {"9:00 AM", "10:00 AM", "11:00 AM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"}
+                preferred_time = args.get("preferred_time") or ""
+                # Match loosely against the real branch list — the model may say
+                # "the Austin branch" rather than the exact "Vantra Riverside"
+                # name, and the <select> on the frontend needs an exact value
+                # to pre-select correctly.
+                branch_guess = (args.get("branch_name") or "").strip().lower()
+                matched_branch = next(
+                    (b["name"] for b in branch_data.BRANCHES if branch_guess and (branch_guess in b["name"].lower() or branch_guess in b["city"].lower())),
+                    branch_data.BRANCHES[0]["name"],
+                )
+                artifacts["appointment_form"] = {
+                    "name": args.get("name") or "",
+                    "email": args.get("email") or "",
+                    "branch_name": matched_branch,
+                    "preferred_date": args.get("preferred_date") or "",
+                    "preferred_time": preferred_time if preferred_time in valid_times else "",
+                    "reason": args.get("reason") or "",
+                }
+                return {"status": "form_shown", "note": "A pre-filled booking form has been shown to the customer — tell them what you filled in and to confirm/complete the rest, don't ask them to re-type it in chat."}
+
+            if name == "escalate_to_human":
+                ticket = models.CaseTicket(
+                    sender_email=args["email"],
+                    subject="FAQ assistant escalation",
+                    body=args["message"],
+                    department="General Support",
+                    status="Needs Review",
+                )
+                db.add(ticket)
+                db.commit()
+                db.refresh(ticket)
+                return {
+                    "status": "escalated",
+                    "ticket_id": ticket.id,
+                    "customer_care_number": branch_data.CUSTOMER_CARE_NUMBER,
+                    "note": f"Tell the customer a support agent will email them at {args['email']}, and mention they can also call {branch_data.CUSTOMER_CARE_NUMBER} ({branch_data.CUSTOMER_CARE_HOURS}) for anything urgent.",
+                }
+
+            return {"error": f"Unknown tool '{name}'"}
         except (KeyError, TypeError, ValueError) as exc:
             return {"error": f"Invalid arguments: {exc}"}
 

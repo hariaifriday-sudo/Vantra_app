@@ -173,7 +173,10 @@ class FraudAlert(Base):
     amount: Mapped[float] = mapped_column(Float)
     merchant: Mapped[str] = mapped_column(String(255))
     rule: Mapped[str] = mapped_column(String(255))
+    rule_type: Mapped[str | None] = mapped_column(String(32), nullable=True)  # geo_mismatch | velocity | ... — drives risk scoring
     risk: Mapped[str] = mapped_column(String(16))  # Critical|High|Medium|Low
+    risk_score: Mapped[int] = mapped_column(Integer, default=0)
+    linked_case_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(32), default="Open")
     ai_explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=now_utc)
@@ -189,6 +192,7 @@ class AmlAlert(Base):
     entity_name: Mapped[str] = mapped_column(String(255))
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     alert_type: Mapped[str] = mapped_column(String(64))
+    rule_type: Mapped[str | None] = mapped_column(String(32), nullable=True)  # structuring | velocity | round_number | ... — drives risk scoring
     volume: Mapped[float] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(32), default="Open")
     narrative: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -197,6 +201,8 @@ class AmlAlert(Base):
     agent_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(String(16), default="seed")  # seed | scan
     case_ref: Mapped[str] = mapped_column(String(32), unique=True)
+    risk_score: Mapped[int] = mapped_column(Integer, default=0)
+    linked_case_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(default=now_utc)
 
 
@@ -266,4 +272,43 @@ class AuditLog(Base):
     target_type: Mapped[str] = mapped_column(String(64))
     target_id: Mapped[str] = mapped_column(String(64))
     details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=now_utc)
+
+
+class DetectionRule(Base):
+    """A configurable AML or fraud detection rule. Seeded from the thresholds
+    that used to be hardcoded module constants in routers/aml.py and
+    routers/fraud.py — the scan functions now read active rules from here
+    instead, so agents can tune/add/remove rules from the Configuration UI
+    without a code change."""
+    __tablename__ = "detection_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    domain: Mapped[str] = mapped_column(String(16))  # aml | fraud
+    rule_type: Mapped[str] = mapped_column(String(32))  # structuring | velocity | geo_mismatch | amount_outlier
+    label: Mapped[str] = mapped_column(String(255))
+    params: Mapped[dict] = mapped_column(JSON, default=dict)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(default=now_utc)
+
+
+class BranchAppointment(Base):
+    """A branch visit booked from the public FAQ assistant. No login is
+    required to book, so user_id is nullable — the visitor is identified by
+    the contact details they enter directly into the booking card."""
+    __tablename__ = "branch_appointments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    reference: Mapped[str] = mapped_column(String(16), unique=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    name: Mapped[str] = mapped_column(String(255))
+    email: Mapped[str] = mapped_column(String(255))
+    phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    branch_name: Mapped[str] = mapped_column(String(255))
+    preferred_date: Mapped[str] = mapped_column(String(32))
+    preferred_time: Mapped[str] = mapped_column(String(32))
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="Requested")
+    created_at: Mapped[datetime] = mapped_column(default=now_utc)
     created_at: Mapped[datetime] = mapped_column(default=now_utc)

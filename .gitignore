@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 .env
+
+# Strix security-scan run output (local scan artifacts, not source)
+strix_runs/
 server/server.log
 server/__pycache__/
 server/app/__pycache__/

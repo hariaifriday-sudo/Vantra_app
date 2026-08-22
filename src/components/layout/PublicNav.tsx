@@ -37,14 +37,16 @@ export function PublicNav() {
             <Link key={l.label} to={l.to} className="relative py-1 text-sm font-medium text-ink-muted transition-colors hover:text-ink">
               <span className={cn('relative z-10', active && 'text-ink')}>{l.label}</span>
               {active ? (
-                <motion.span layoutId="public-nav-underline" className="absolute inset-x-0 -bottom-0.5 h-0.5 rounded-full bg-accent" transition={{ type: 'spring', stiffness: 500, damping: 34 }} />
+                <motion.span layoutId="public-nav-underline" className="absolute inset-x-0 -bottom-0.5 h-0.5 rounded-full bg-[#8B7BC0]" transition={{ type: 'spring', stiffness: 500, damping: 34 }} />
               ) : null}
             </Link>
           )
         })}
       </nav>
       <Link to="/login">
-        <Button size="sm">Log In / Sign Up</Button>
+        <Button size="sm" className="bg-[#171516] text-white hover:bg-[#2a2628] hover:brightness-100">
+          Log In / Sign Up
+        </Button>
       </Link>
     </motion.header>
   )

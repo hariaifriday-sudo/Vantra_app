@@ -90,6 +90,8 @@ export default function Homepage() {
   const cardJourneyRef = useRef<HTMLDivElement>(null)
   const walletPocketRef = useRef<HTMLDivElement>(null)
   const walletCardGroupRef = useRef<HTMLDivElement>(null)
+  const heroVideoRef = useRef<HTMLVideoElement>(null)
+  const dockedVideoRef = useRef<HTMLVideoElement>(null)
   const testimonialsRef = useRef<HTMLDivElement>(null)
   const [openFaq, setOpenFaq] = useState<number | null>(0)
   const tiltX = useMotionValue(0)
@@ -115,6 +117,8 @@ export default function Homepage() {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (reduce || !heroRef.current || !cardsRef.current) return
 
+    let cleanupResize: (() => void) | undefined
+
     const ctx = gsap.context(() => {
       // Deliberately opacity-only: a `scale`/transform here would make this
       // section a containing block for the pinned card below (per the CSS
@@ -125,58 +129,115 @@ export default function Homepage() {
         scrollTrigger: { trigger: heroRef.current, start: 'top top', end: 'bottom top', scrub: 0.6 },
       })
 
-      // The hero card travels down the page (pinned in place while everything
-      // else scrolls past it), shrinking, flattening, and fading out right as
-      // the resting card already sitting in the wallet pocket fades in. Both
-      // tweens are deliberately keyed off the SAME trigger/basis (travelCard's
-      // own pin range) rather than one being tied to the pocket's position —
-      // pinSpacing shifts the pocket further down the page by the pin's exact
-      // duration, which would otherwise put the two on independently-shifting
-      // coordinate systems and leave a scroll range where neither card shows.
+      // The hero card is a true single element that flies from the hero all
+      // the way down into the wallet pocket — not a pin-in-place + separate
+      // fade-in illusion. Each tick, we re-measure the pocket's LIVE on-screen
+      // rect (it's an ordinary in-flow element, so its position changes as the
+      // page scrolls) and interpolate the flying card's fixed-position
+      // transform toward it. Because the target is measured fresh every frame,
+      // the card always lands exactly on the pocket regardless of how content
+      // above reflows — no guessed pin distance to keep in sync.
       if (cardJourneyRef.current && cardsRef.current && walletPocketRef.current && walletCardGroupRef.current) {
-        const travelCard = cardJourneyRef.current
-        // The pin target (travelCard) is left untouched — GSAP owns its transform
-        // for the fixed-position pin trick. We animate the shrink/rotate/fade on
-        // this inner child instead, so our tween never fights GSAP's own math.
-        const travelCardInner = cardsRef.current
+        const flyingCard = cardsRef.current
         const dockedCard = walletCardGroupRef.current
-        const pinDistance = 1300
+        const journeySlot = cardJourneyRef.current
+        // Re-measured on mount AND on every window resize (see the listener
+        // below) — a one-time snapshot goes stale the moment the window
+        // resizes or late-loading fonts/images reflow the hero, which was
+        // landing the flying card in the wrong spot entirely. Deliberately
+        // NOT using ScrollTrigger's `refreshInit` hook for this: it did not
+        // reliably fire on every page load in testing, silently leaving the
+        // card un-initialized with no error — measuring directly here is a
+        // plain, deterministic function call we can reason about.
+        let startRect = { left: 0, top: 0, width: 0, height: 0 }
 
+        function measureAndPin() {
+          gsap.set(flyingCard, { clearProps: 'all' })
+          const rect = flyingCard.getBoundingClientRect()
+          startRect = { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+
+          // Hold the hero's layout space (the child is about to leave flow
+          // via position:fixed) and lift the card out of flow, pre-positioned
+          // via transform so it doesn't visually jump on the next tick. The
+          // box's own width/height are set ONCE per measurement and never
+          // touched again — resizing a hardware-decoded <video>'s layout box
+          // on every scroll tick is what was dropping its composited frame
+          // to blank. Scale is done purely via `transform: scale()` instead
+          // (transform-origin: top left), so the video's decode surface
+          // never changes size, only its on-screen presentation.
+          gsap.set(journeySlot, { height: startRect.height })
+          gsap.set(flyingCard, {
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            margin: 0,
+            zIndex: 50,
+            width: startRect.width,
+            height: startRect.height,
+            transformOrigin: 'top left',
+            x: startRect.left,
+            y: startRect.top,
+            scale: 1,
+          })
+          ScrollTrigger.refresh()
+        }
+
+        measureAndPin()
         gsap.set(dockedCard, { opacity: 0 })
 
+        let resizeTimer: ReturnType<typeof setTimeout>
+        const onResize = () => {
+          clearTimeout(resizeTimer)
+          resizeTimer = setTimeout(measureAndPin, 150)
+        }
+        window.addEventListener('resize', onResize)
+        cleanupResize = () => {
+          clearTimeout(resizeTimer)
+          window.removeEventListener('resize', onResize)
+        }
+
         ScrollTrigger.create({
-          trigger: travelCard,
+          trigger: journeySlot,
           start: 'center center',
-          end: `+=${pinDistance}`,
-          pin: travelCard,
-          pinSpacing: true,
-          anticipatePin: 1,
-          scrub: 0.8,
+          endTrigger: walletPocketRef.current,
+          end: 'center center',
+          scrub: 0.6,
           onUpdate: (self) => {
             const p = self.progress
-            const handoff = 0.7
-            gsap.set(travelCardInner, { scale: 1 - 0.55 * p, rotate: -6 * (1 - p) })
-            gsap.set(travelCardInner, { opacity: p > handoff ? 1 - (p - handoff) / (1 - handoff) : 1 })
-          },
-        })
+            const target = walletPocketRef.current!.getBoundingClientRect()
+            gsap.set(flyingCard, {
+              x: gsap.utils.interpolate(startRect.left, target.left, p),
+              y: gsap.utils.interpolate(startRect.top, target.top, p),
+              scale: gsap.utils.interpolate(1, target.width / startRect.width, p),
+              rotate: -6 * (1 - p),
+            })
 
-        gsap.to(dockedCard, {
-          opacity: 1,
-          ease: 'none',
-          scrollTrigger: {
-            trigger: travelCard,
-            start: `center center+=${pinDistance * 0.65}`,
-            end: `center center+=${pinDistance}`,
-            scrub: 0.6,
+            // Crossfade to the docked video in the last stretch, exactly as
+            // the flying card's rect converges on the pocket's — the swap is
+            // invisible because both are the same frame in the same spot.
+            const handoff = 0.9
+            const dockedOpacity = p > handoff ? (p - handoff) / (1 - handoff) : 0
+            gsap.set(dockedCard, { opacity: dockedOpacity })
+            gsap.set(flyingCard, { opacity: 1 - dockedOpacity })
+
+            // Scrub the hero video in lockstep with scroll: badges fade and the
+            // cards glide into the wallet exactly as fast as the user scrolls.
+            const video = heroVideoRef.current
+            if (video && video.duration) {
+              video.currentTime = p * video.duration * 0.98
+            }
           },
         })
       }
     })
-    return () => ctx.revert()
+    return () => {
+      cleanupResize?.()
+      ctx.revert()
+    }
   }, [])
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] px-3 py-4 sm:px-6">
+    <div className="min-h-screen bg-[#0d0b12] px-3 py-4 sm:px-6">
       <div className="mx-auto max-w-6xl">
         <PublicNav />
       </div>
@@ -210,7 +271,7 @@ export default function Homepage() {
             <SectionReveal className="flex items-center justify-center gap-6">
               <span className="hidden h-1.5 w-1.5 rounded-full bg-ink/15 sm:block" />
               <Eyebrow>
-                <Lightning size={13} weight="fill" className="text-accent" />
+                <Lightning size={13} weight="fill" className="text-[#8B7BC0]" />
                 AI-Powered Banking, Built for Everyone
               </Eyebrow>
               <span className="hidden h-1.5 w-1.5 rounded-full bg-ink/15 sm:block" />
@@ -230,7 +291,11 @@ export default function Homepage() {
 
             <SectionReveal delay={0.15} className="mt-8 flex items-center justify-center gap-3">
               <Link to="/login">
-                <Button size="lg" iconRight={<ArrowRight size={18} weight="bold" />}>
+                <Button
+                  size="lg"
+                  className="bg-[#171516] text-white shadow-soft hover:bg-[#2a2628] hover:brightness-100"
+                  iconRight={<ArrowRight size={18} weight="bold" />}
+                >
                   Get Started
                 </Button>
               </Link>
@@ -241,55 +306,32 @@ export default function Homepage() {
               </Link>
             </SectionReveal>
 
-            <div ref={cardJourneyRef} className="relative mx-auto mt-16 h-56 w-72 sm:h-64 sm:w-80">
+            <div ref={cardJourneyRef} className="relative mx-auto mt-16 w-80 sm:w-[26rem]">
               <div
                 ref={cardsRef}
                 onMouseMove={handleCardTilt}
                 onMouseLeave={resetCardTilt}
                 style={{ perspective: 900 }}
-                className="relative h-full w-full"
+                className="relative aspect-video w-full"
               >
                 <motion.div
-                  initial={{ opacity: 0, y: 16, scale: 0.95 }}
-                  animate={{ opacity: 1, y: [0, -10, 0], scale: 1 }}
-                  transition={{
-                    opacity: { duration: 0.6, delay: 0.55 },
-                    scale: { duration: 0.6, delay: 0.55 },
-                    y: { duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 1.2 },
-                  }}
-                  className="absolute -left-9 top-4 z-20 grid h-12 w-12 place-items-center rounded-2xl bg-surface text-positive shadow-lift"
+                  style={{ rotateX: springTiltX, rotateY: springTiltY, transformStyle: 'preserve-3d' }}
+                  className="relative h-full w-full"
                 >
-                  <ShieldCheck size={20} weight="fill" />
-                </motion.div>
-                <motion.div
-                  initial={{ opacity: 0, y: 16, scale: 0.95 }}
-                  animate={{ opacity: 1, y: [0, 12, 0], scale: 1 }}
-                  transition={{
-                    opacity: { duration: 0.6, delay: 0.75 },
-                    scale: { duration: 0.6, delay: 0.75 },
-                    y: { duration: 4.5, repeat: Infinity, ease: 'easeInOut', delay: 0.6 },
-                  }}
-                  className="absolute -right-6 bottom-8 z-20 grid h-11 w-11 place-items-center rounded-2xl bg-surface text-accent shadow-lift"
-                >
-                  <Lightning size={18} weight="fill" />
-                </motion.div>
-
-                <motion.div style={{ rotateX: springTiltX, rotateY: springTiltY, transformStyle: 'preserve-3d' }} className="relative h-full w-full">
-                  <div className="absolute inset-0 rotate-[8deg] rounded-3xl bg-[#141414] shadow-lift" />
-                  <motion.div
-                    animate={{ y: [0, -8, 0] }}
-                    transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-                    className="absolute inset-0 -rotate-[3deg] rounded-3xl bg-gradient-to-br from-[#c9c2f0] via-[#bfe3f5] to-[#e8e4f7] p-6 text-left shadow-lift"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="h-8 w-11 rounded-md bg-white/50" />
-                      <span className="flex items-center gap-1.5 font-display text-sm font-bold text-ink/70">
-                        <Bank size={16} weight="fill" /> VANTRA
-                      </span>
-                    </div>
-                    <p className="mt-10 font-mono text-lg tracking-[0.2em] text-ink/70">•••• •••• •••• 4821</p>
-                    <p className="mt-3 text-xs font-medium text-ink/60">MAREN OKAFOR</p>
-                  </motion.div>
+                  <video
+                    ref={heroVideoRef}
+                    src="/media/vantra-card-wallet.mp4"
+                    muted
+                    playsInline
+                    preload="auto"
+                    // The video's own generated background is a flat pale
+                    // lavender rectangle — object-cover crops it hard at the
+                    // card's edges, which reads as a pasted-in box against the
+                    // page's soft gradient behind it. Fading the video's own
+                    // edges to transparent lets the page's real background
+                    // show through at the border instead of a visible seam.
+                    className="h-full w-full rounded-3xl object-cover shadow-lift [-webkit-mask-image:radial-gradient(ellipse_78%_78%_at_center,black_62%,transparent_100%)] [mask-image:radial-gradient(ellipse_78%_78%_at_center,black_62%,transparent_100%)]"
+                  />
                 </motion.div>
               </div>
             </div>
@@ -325,7 +367,7 @@ export default function Homepage() {
               {walletFeatures.slice(0, 2).map((f) => (
                 <StaggerItem key={f.title}>
                   <div className="flex flex-col items-center gap-3 sm:flex-row-reverse sm:items-start">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent/15 text-accent">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#C6B9E2]/25 text-[#8B7BC0]">
                       <f.icon size={18} weight="bold" />
                     </span>
                     <div>
@@ -337,30 +379,31 @@ export default function Homepage() {
               ))}
             </StaggerGroup>
 
-            <SectionReveal delay={0.1} className="relative mx-auto h-72 w-56">
+            <SectionReveal delay={0.1} className="relative mx-auto aspect-video w-64 sm:w-80">
               {/* Wallet pocket — also the scroll endpoint the traveling hero card docks into. */}
-              <div ref={walletPocketRef} className="absolute inset-x-0 bottom-0 z-10 h-40 rounded-3xl border-2 border-dashed border-border-hair bg-surface-2 shadow-soft">
+              <div ref={walletPocketRef} className="absolute inset-0 rounded-3xl border-2 border-dashed border-border-hair bg-surface-2 shadow-soft">
                 <div className="grid h-full place-items-center text-ink/10">
                   <Bank size={64} weight="fill" />
                 </div>
               </div>
 
-              <div ref={walletCardGroupRef} style={{ opacity: 0 }} className="absolute inset-x-3 top-0 z-0 h-36">
-                <div className="absolute inset-0 rotate-[6deg] rounded-2xl bg-[#141414] shadow-lift" />
-                <motion.div
-                  animate={{ y: [0, -5, 0] }}
-                  transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-                  className="absolute inset-0 -rotate-[2deg] rounded-2xl bg-gradient-to-br from-[#c9c2f0] via-[#bfe3f5] to-[#e8e4f7] p-4 text-left shadow-lift"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="h-4 w-6 rounded-sm bg-white/60" />
-                    <span className="flex items-center gap-1 text-[10px] font-bold text-ink/70">
-                      <Bank size={11} weight="fill" /> VANTRA
-                    </span>
-                  </div>
-                  <p className="mt-4 font-mono text-xs tracking-[0.15em] text-ink/60">•••• •••• •••• 4821</p>
-                  <p className="mt-1.5 text-[9px] font-medium text-ink/50">MAREN OKAFOR</p>
-                </motion.div>
+              <div ref={walletCardGroupRef} style={{ opacity: 0 }} className="absolute inset-0 z-10">
+                {/* Ambient glow color-matched to the video's own pale-lavender
+                    background, bleeding past its edges — bridges the mask
+                    fade below into the page rather than fading to bare white. */}
+                <div className="pointer-events-none absolute -inset-6 -z-10 rounded-[40px] bg-[#E9EEF9] blur-2xl" />
+                <video
+                  ref={dockedVideoRef}
+                  src="/media/vantra-card-wallet.mp4"
+                  muted
+                  playsInline
+                  preload="auto"
+                  onLoadedMetadata={(e) => {
+                    const v = e.currentTarget
+                    v.currentTime = Math.max(0, v.duration - 0.08)
+                  }}
+                  className="h-full w-full rounded-3xl object-cover shadow-lift [-webkit-mask-image:radial-gradient(ellipse_78%_78%_at_center,black_62%,transparent_100%)] [mask-image:radial-gradient(ellipse_78%_78%_at_center,black_62%,transparent_100%)]"
+                />
               </div>
             </SectionReveal>
 
@@ -368,7 +411,7 @@ export default function Homepage() {
               {walletFeatures.slice(2, 4).map((f) => (
                 <StaggerItem key={f.title}>
                   <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent/15 text-accent">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#C6B9E2]/25 text-[#8B7BC0]">
                       <f.icon size={18} weight="bold" />
                     </span>
                     <div>
@@ -383,7 +426,9 @@ export default function Homepage() {
 
           <div className="mt-14 text-center">
             <Link to="/login">
-              <Button size="lg">Get Started</Button>
+              <Button size="lg" className="bg-[#171516] text-white shadow-soft hover:bg-[#2a2628] hover:brightness-100">
+                Get Started
+              </Button>
             </Link>
           </div>
         </section>
@@ -447,10 +492,10 @@ export default function Homepage() {
             </StaggerItem>
 
             <StaggerItem>
-              <Card className="relative h-full overflow-hidden bg-[#1a1206] p-8 text-white">
+              <Card className="relative h-full overflow-hidden bg-[#171422] p-8 text-white">
                 <div className="pointer-events-none absolute inset-0">
-                  <div className="absolute -bottom-10 left-1/2 h-40 w-[140%] -translate-x-1/2 rounded-[100%] bg-gradient-to-t from-accent/70 via-accent/25 to-transparent blur-2xl" />
-                  <div className="absolute -bottom-24 left-1/2 h-48 w-[160%] -translate-x-1/2 rounded-[100%] bg-gradient-to-t from-[#7a4a12]/80 to-transparent blur-3xl" />
+                  <div className="absolute -bottom-10 left-1/2 h-40 w-[140%] -translate-x-1/2 rounded-[100%] bg-gradient-to-t from-[#C6B9E2]/70 via-[#C6B9E2]/25 to-transparent blur-2xl" />
+                  <div className="absolute -bottom-24 left-1/2 h-48 w-[160%] -translate-x-1/2 rounded-[100%] bg-gradient-to-t from-[#4a3f6b]/80 to-transparent blur-3xl" />
                 </div>
                 <div className="relative flex h-full flex-col justify-between">
                   <div>
@@ -518,7 +563,7 @@ export default function Homepage() {
                 <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
                   Trusted Partner
                 </span>
-                <Quotes size={22} weight="fill" className="mt-4 text-accent/50" />
+                <Quotes size={22} weight="fill" className="mt-4 text-[#8B7BC0]/50" />
                 <p className="mt-3 text-sm leading-relaxed text-ink">{t.quote}</p>
                 <div className="mt-5 flex items-center gap-3">
                   <img src={t.avatar} alt={t.name} className="h-9 w-9 rounded-full object-cover" />
@@ -576,7 +621,7 @@ export default function Homepage() {
             })}
           </div>
           <div className="mt-8 text-center">
-            <Link to="/assistant" className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:underline">
+            <Link to="/assistant" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#8B7BC0] hover:underline">
               Ask Vantra a question directly <ArrowRight size={14} weight="bold" />
             </Link>
           </div>
@@ -592,22 +637,25 @@ export default function Homepage() {
           <StaggerGroup className="mx-auto mt-14 grid max-w-4xl gap-5 sm:grid-cols-3">
             {pricing.map((tier) => (
               <StaggerItem key={tier.name}>
-                <Card className={`h-full p-7 ${tier.featured ? 'border-accent bg-[#1a1206] text-white' : ''}`}>
+                <Card className={`h-full p-7 ${tier.featured ? 'border-2 border-[#C6B9E2] shadow-lift' : ''}`}>
                   {tier.featured ? (
-                    <span className="rounded-full bg-accent px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-accent-ink">Most popular</span>
+                    <span className="rounded-full bg-positive px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">Most popular</span>
                   ) : null}
-                  <h3 className={`mt-3 font-display text-lg font-semibold ${tier.featured ? 'text-white' : 'text-ink'}`}>{tier.name}</h3>
-                  <p className={`mt-1 font-display text-3xl font-bold ${tier.featured ? 'text-white' : 'text-ink'}`}>{tier.price}</p>
-                  <p className={`mt-2 text-sm ${tier.featured ? 'text-white/70' : 'text-ink-muted'}`}>{tier.blurb}</p>
-                  <ul className={`mt-5 space-y-2 text-sm ${tier.featured ? 'text-white/85' : 'text-ink-muted'}`}>
+                  <h3 className="mt-3 font-display text-lg font-semibold text-ink">{tier.name}</h3>
+                  <p className="mt-1 font-display text-3xl font-bold text-ink">{tier.price}</p>
+                  <p className="mt-2 text-sm text-ink-muted">{tier.blurb}</p>
+                  <ul className="mt-5 space-y-2 text-sm text-ink-muted">
                     {tier.features.map((f) => (
                       <li key={f} className="flex items-center gap-2">
-                        <ShieldCheck size={14} weight="bold" className={tier.featured ? 'text-accent' : 'text-positive'} />
+                        <ShieldCheck size={14} weight="bold" className="text-positive" />
                         {f}
                       </li>
                     ))}
                   </ul>
-                  <Button variant={tier.featured ? 'primary' : 'secondary'} className="mt-6 w-full">
+                  <Button
+                    variant={tier.featured ? 'primary' : 'secondary'}
+                    className={tier.featured ? 'mt-6 w-full bg-[#171516] text-white hover:bg-[#2a2628] hover:brightness-100' : 'mt-6 w-full'}
+                  >
                     {tier.price === 'Custom' ? 'Contact Sales' : 'Get Started'}
                   </Button>
                 </Card>
@@ -626,7 +674,9 @@ export default function Homepage() {
               Bank smarter with AI that works quietly behind every payment.
             </h2>
             <Link to="/login" className="mt-7 inline-block">
-              <Button size="lg">Open an Account</Button>
+              <Button size="lg" className="bg-[#171516] text-white shadow-soft hover:bg-[#2a2628] hover:brightness-100">
+                Open an Account
+              </Button>
             </Link>
           </SectionReveal>
         </section>

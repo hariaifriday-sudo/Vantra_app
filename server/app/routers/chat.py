@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from .. import branches as branch_data
 from .. import models, schemas
-from ..chat_tools import ACCOUNT_TOOLS, build_executor
+from ..chat_tools import ACCOUNT_TOOLS, FAQ_TOOLS, build_executor, build_faq_executor
 from ..database import SessionLocal, get_db
 from ..llm import stream_chat, stream_chat_with_tools
 from ..rag import format_context, retrieve_policies
@@ -25,19 +26,77 @@ credit cards, personal loans), navigation help, and basic financial calculations
 Be concise, warm, and precise. Never invent account-specific details you don't have. If asked
 something account-specific, tell the user to log in.
 
+You have tools for real actions, not just talk: find_nearest_branch shows real branch address/
+hours/Google-Maps-link automatically — don't re-type them yourself. propose_appointment_booking
+stages a booking form for the customer to fill in — call it as soon as they want to book a visit.
+Pre-fill whatever you can already tell from the conversation (name, email, branch, date, time,
+reason) as arguments; pass an empty string for anything you don't know rather than asking for it
+first — the form itself lets them fill in or fix whatever's missing. escalate_to_human opens a real
+support ticket — use it when they explicitly want a human, or when their request is genuinely
+outside what you can do unauthenticated; you'll need their email first.
+
+Customer care line: {branch_data.CUSTOMER_CARE_NUMBER} ({branch_data.CUSTOMER_CARE_HOURS}). Give
+this out when a human wants to call instead of chat, when escalating, or when you can't resolve
+something and there's no better next step — not on every message.
+
 {FORMAT_GUIDANCE}"""
 
-AGENT_SYSTEM_PROMPT = f"""You are Vantra Copilot, an internal AI assistant for Vantra Bank
-employees (compliance, fraud ops, credit risk, support). Help agents with case guidance and
-quick lookups. Below is the most relevant excerpt(s) from the internal policy library, retrieved
-for this specific question — base regulatory/policy answers on this retrieved text and cite the
-policy title in your answer. If the retrieved text doesn't actually answer the question, say so
-plainly instead of guessing.
+def _agent_system_prompt(agent: models.User, db: Session, policy_context: str) -> str:
+    """Grounds the copilot in the agent's real queues — without this it can only
+    search the policy library, so "summarize my AML cases" or "what's pending
+    today" had nothing to answer from and returned a canned non-answer."""
+    aml_open = (
+        db.query(models.AmlAlert)
+        .filter(models.AmlAlert.status.in_(["Open", "Investigating"]))
+        .order_by(models.AmlAlert.risk_score.desc(), models.AmlAlert.created_at.desc())
+        .all()
+    )
+    fraud_open = db.query(models.FraudAlert).filter(models.FraudAlert.status == "Open").order_by(models.FraudAlert.risk_score.desc(), models.FraudAlert.created_at.desc()).all()
+    kyc_pending = db.query(models.KycApplication).filter(models.KycApplication.status.in_(["pending", "needs_info"])).count()
+    cases_open = db.query(models.CaseTicket).filter(models.CaseTicket.status == "Needs Review").all()
+    underwriting_pending = db.query(models.UnderwritingApplication).filter(models.UnderwritingApplication.status == "Pending").all()
+
+    aml_summary = "\n".join(
+        f"- [{a.case_ref}] {a.entity_name}: {a.alert_type}, ${a.volume:,.2f}, risk {a.risk_score}"
+        + (f", linked to case {a.linked_case_id}" if a.linked_case_id and a.linked_case_id != a.case_ref else "")
+        for a in aml_open[:8]
+    ) or "none open"
+    fraud_summary = "\n".join(
+        f"- {f.account_masked}: {f.rule}, ${f.amount:,.2f}, risk {f.risk} (score {f.risk_score})"
+        + (f", linked to case {f.linked_case_id}" if f.linked_case_id else "")
+        for f in fraud_open[:8]
+    ) or "none open"
+    cases_summary = "\n".join(f"- [{c.id}] {c.subject} ({c.department or 'unrouted'})" for c in cases_open[:5]) or "none open"
+    underwriting_summary = "\n".join(
+        f"- {u.applicant_name}: {u.loan_type}, ${u.amount:,.2f}, grade {u.grade or '—'}" for u in underwriting_pending[:5]
+    ) or "none pending"
+
+    return f"""You are Vantra Copilot, an internal AI assistant for Vantra Bank
+employees (compliance, fraud ops, credit risk, support), speaking to {agent.full_name}
+({agent.department or 'Compliance'}). Use the real queue data below to answer directly —
+never say you don't have visibility into cases, alerts, or pending work, since it's all here.
+
+Open AML alerts ({len(aml_open)} total, highest risk first):
+{aml_summary}
+
+Open Fraud alerts ({len(fraud_open)} total):
+{fraud_summary}
+
+KYC applications pending review: {kyc_pending}
+
+Open support cases ({len(cases_open)} total):
+{cases_summary}
+
+Underwriting applications pending ({len(underwriting_pending)} total):
+{underwriting_summary}
+
+For policy/regulatory questions, use the retrieved excerpt below and cite the policy title.
+If the retrieved text doesn't actually answer the question, say so plainly instead of guessing.
 
 {FORMAT_GUIDANCE}
 
 --- RETRIEVED POLICY CONTEXT ---
-{{policy_context}}
+{policy_context}
 --- END CONTEXT ---"""
 
 
@@ -141,13 +200,20 @@ async def chat_stream(
     query param (not a header) so this works with a plain EventSource-free fetch
     stream from the browser without extra CORS/auth-header plumbing."""
     user = await _resolve_user(token, db)
-    use_tools = context == "account" and user is not None
+    use_tools = (context == "account" and user is not None) or context == "faq"
 
     if context == "account" and user:
         system_prompt = _account_system_prompt(user, db)
+    elif context == "agent_copilot" and user:
+        matches = retrieve_policies(db, message)
+        system_prompt = _agent_system_prompt(user, db, format_context(matches))
     elif context == "agent_copilot":
         matches = retrieve_policies(db, message)
-        system_prompt = AGENT_SYSTEM_PROMPT.format(policy_context=format_context(matches))
+        system_prompt = (
+            "You are Vantra Copilot. The agent isn't authenticated, so you can only answer from "
+            f"the policy library below, not live queues.\n\n{FORMAT_GUIDANCE}\n\n"
+            f"--- RETRIEVED POLICY CONTEXT ---\n{format_context(matches)}\n--- END CONTEXT ---"
+        )
     else:
         system_prompt = FAQ_SYSTEM_PROMPT
 
@@ -175,7 +241,7 @@ async def chat_stream(
             session.commit()
 
             full_reply = ""
-            if use_tools:
+            if use_tools and context == "account":
                 api_base = str(request.base_url).rstrip("/")
                 artifacts: dict[str, list] = {"pending_transfers": [], "documents": []}
                 executor = build_executor(session, user, token or "", api_base, artifacts)
@@ -189,6 +255,21 @@ async def chat_stream(
                     yield block
                 for pt in artifacts["pending_transfers"]:
                     block = "\n\n```vantra:approve-transfer\n" + json.dumps(pt) + "\n```"
+                    full_reply += block
+                    yield block
+            elif use_tools:  # context == "faq"
+                faq_artifacts: dict[str, object] = {"branches": [], "appointment_form": None}
+                executor = build_faq_executor(session, faq_artifacts)
+                async for chunk in stream_chat_with_tools(messages, system_prompt, FAQ_TOOLS, executor):
+                    full_reply += chunk
+                    yield chunk
+
+                if faq_artifacts["branches"]:
+                    block = "\n\n```vantra:branches\n" + json.dumps(faq_artifacts["branches"]) + "\n```"
+                    full_reply += block
+                    yield block
+                if faq_artifacts["appointment_form"]:
+                    block = "\n\n```vantra:appointment-form\n" + json.dumps(faq_artifacts["appointment_form"]) + "\n```"
                     full_reply += block
                     yield block
             else:

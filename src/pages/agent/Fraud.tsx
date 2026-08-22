@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { Pill } from '@/components/ui/Pill'
 import { formatCurrency } from '@/lib/utils'
 import { api, ApiError, type FraudAlertOut, type FraudScanResult } from '@/lib/api'
+import { RuleConfigPanel } from '@/components/agent/RuleConfigPanel'
 
 const riskTone: Record<string, 'negative' | 'watch' | 'neutral'> = {
   Critical: 'negative',
@@ -22,6 +23,7 @@ export default function Fraud() {
   const [acting, setActing] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
+  const [showConfig, setShowConfig] = useState(false)
 
   useEffect(() => {
     api.get<FraudAlertOut[]>('/api/fraud/alerts').then(setAlerts)
@@ -75,7 +77,7 @@ export default function Fraud() {
           <Button size="sm" onClick={runScan} disabled={scanning} icon={<MagnifyingGlass size={14} />}>
             {scanning ? 'Scanning…' : 'Run Fraud Sweep'}
           </Button>
-          <Button variant="secondary" size="sm" icon={<Gear size={14} />}>
+          <Button variant="secondary" size="sm" icon={<Gear size={14} />} onClick={() => setShowConfig(true)}>
             Configuration
           </Button>
           <Button variant="secondary" size="sm" icon={<DownloadSimple size={14} />}>
@@ -219,6 +221,8 @@ export default function Fraud() {
           </motion.div>
         ) : null}
       </AnimatePresence>
+
+      <AnimatePresence>{showConfig ? <RuleConfigPanel domain="fraud" onClose={() => setShowConfig(false)} /> : null}</AnimatePresence>
     </div>
   )
 }

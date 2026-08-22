@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, Microphone, PaperPlaneTilt, SpeakerHigh, SpeakerSlash, X } from '@phosphor-icons/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AssistantOrb } from './AssistantOrb'
+import { BranchResultsCard } from './BranchResultsCard'
+import { AppointmentBookingCard } from './AppointmentBookingCard'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
+import type { BranchOut } from '@/lib/api'
 import { emitDataChanged } from '@/lib/refresh'
 
 interface PendingTransferBlock {
@@ -15,17 +18,30 @@ interface PendingTransferBlock {
   from_account: string
 }
 
-const APPROVAL_BLOCK_RE = /```vantra:approve-transfer\n([\s\S]*?)\n```/
+// The backend appends zero or more ```vantra:<type>\n{json}\n``` fenced blocks
+// after its natural-language reply — one deterministic way to hand the UI
+// structured data (an approval card, branch results, a booking form) without
+// trusting the model to reproduce IDs/URLs/addresses verbatim in prose.
+const VANTRA_BLOCK_RE = /```vantra:([\w-]+)\n([\s\S]*?)\n```/g
 
-function extractApprovalBlock(text: string): { cleanText: string; approval: PendingTransferBlock | null } {
-  const match = text.match(APPROVAL_BLOCK_RE)
-  if (!match) return { cleanText: text, approval: null }
-  try {
-    const approval = JSON.parse(match[1]) as PendingTransferBlock
-    return { cleanText: text.slice(0, match.index).trimEnd(), approval }
-  } catch {
-    return { cleanText: text, approval: null }
-  }
+interface VantraBlock {
+  type: string
+  data: unknown
+}
+
+function extractVantraBlocks(text: string): { cleanText: string; blocks: VantraBlock[] } {
+  const blocks: VantraBlock[] = []
+  const cleanText = text
+    .replace(VANTRA_BLOCK_RE, (_match, type: string, json: string) => {
+      try {
+        blocks.push({ type, data: JSON.parse(json) })
+      } catch {
+        // malformed block — drop it silently rather than showing raw JSON
+      }
+      return ''
+    })
+    .trimEnd()
+  return { cleanText, blocks }
 }
 
 function TransferApprovalCard({ transfer, dark }: { transfer: PendingTransferBlock; dark: boolean }) {
@@ -162,20 +178,40 @@ function MarkdownMessage({ text, dark }: { text: string; dark: boolean }) {
   )
 }
 
-export function ChatPanel({
-  title = 'Ask Vantra',
-  initialMessages,
-  context = 'faq',
-  dark = false,
-  className,
-}: {
+export interface ChatPanelHandle {
+  sendMessage: (text: string) => void
+}
+
+function loadPersisted(persistKey: string | undefined, initialMessages: ChatMessage[]): ChatMessage[] {
+  if (!persistKey) return initialMessages
+  try {
+    const raw = localStorage.getItem(`vantra_chat_${persistKey}`)
+    if (!raw) return initialMessages
+    const parsed = JSON.parse(raw) as ChatMessage[]
+    return Array.isArray(parsed) && parsed.length ? parsed : initialMessages
+  } catch {
+    return initialMessages
+  }
+}
+
+export const ChatPanel = forwardRef<ChatPanelHandle, {
   title?: string
   initialMessages: ChatMessage[]
   context?: ChatContext
   dark?: boolean
   className?: string
-}) {
-  const [messages, setMessages] = useState(initialMessages)
+  /** When set, the conversation survives a reload via localStorage under this key. */
+  persistKey?: string
+  /** Fires true right as a reply starts being read aloud, false when it stops. */
+  onSpeakingChange?: (speaking: boolean) => void
+  /** Fires on every change to the full transcript — lets a parent page (e.g. to
+   * drive "already asked" suggestion filtering) see what's been discussed. */
+  onMessagesChange?: (messages: ChatMessage[]) => void
+}>(function ChatPanel(
+  { title = 'Ask Vantra', initialMessages, context = 'faq', dark = false, className, persistKey, onSpeakingChange, onMessagesChange },
+  ref,
+) {
+  const [messages, setMessages] = useState(() => loadPersisted(persistKey, initialMessages))
   const [draft, setDraft] = useState('')
   const [listening, setListening] = useState(false)
   const [streaming, setStreaming] = useState(false)
@@ -188,6 +224,9 @@ export function ChatPanel({
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+    onMessagesChange?.(messages)
+    if (persistKey) localStorage.setItem(`vantra_chat_${persistKey}`, JSON.stringify(messages))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages])
 
   useEffect(() => {
@@ -215,7 +254,14 @@ export function ChatPanel({
       })
       if (speakReplies && ttsSupported.current && fullReply.trim()) {
         window.speechSynthesis.cancel()
-        window.speechSynthesis.speak(new SpeechSynthesisUtterance(fullReply))
+        // Strip the ```vantra:...``` data blocks before speaking — they're
+        // structured JSON for the UI, not something to read aloud.
+        const { cleanText } = extractVantraBlocks(fullReply)
+        const utterance = new SpeechSynthesisUtterance(cleanText)
+        utterance.onstart = () => onSpeakingChange?.(true)
+        utterance.onend = () => onSpeakingChange?.(false)
+        utterance.onerror = () => onSpeakingChange?.(false)
+        window.speechSynthesis.speak(utterance)
       }
       // The assistant can create/update/delete goals and schedule auto-payments
       // directly (no separate approval step), so any account-context reply may
@@ -231,6 +277,8 @@ export function ChatPanel({
       setStreaming(false)
     }
   }
+
+  useImperativeHandle(ref, () => ({ sendMessage: (text: string) => send(text) }))
 
   function toggleVoice() {
     const Recognition = getSpeechRecognition()
@@ -273,7 +321,10 @@ export function ChatPanel({
         </div>
         <button
           onClick={() => {
-            if (speakReplies && ttsSupported.current) window.speechSynthesis.cancel()
+            if (speakReplies && ttsSupported.current) {
+              window.speechSynthesis.cancel()
+              onSpeakingChange?.(false)
+            }
             setSpeakReplies((v) => !v)
           }}
           disabled={!ttsSupported.current}
@@ -312,11 +363,17 @@ export function ChatPanel({
                   {m.text ? (
                     m.role === 'assistant' ? (
                       (() => {
-                        const { cleanText, approval } = extractApprovalBlock(m.text)
+                        const { cleanText, blocks } = extractVantraBlocks(m.text)
                         return (
                           <>
                             <MarkdownMessage text={cleanText} dark={dark} />
-                            {approval ? <TransferApprovalCard transfer={approval} dark={dark} /> : null}
+                            {blocks.map((block, bi) => {
+                              if (block.type === 'approve-transfer') return <TransferApprovalCard key={bi} transfer={block.data as PendingTransferBlock} dark={dark} />
+                              if (block.type === 'branches') return <BranchResultsCard key={bi} branches={block.data as BranchOut[]} dark={dark} />
+                              if (block.type === 'appointment-form')
+                                return <AppointmentBookingCard key={bi} prefill={block.data as { branch_name: string; name?: string; email?: string; preferred_date?: string; preferred_time?: string; reason?: string }} dark={dark} />
+                              return null
+                            })}
                           </>
                         )
                       })()
@@ -371,4 +428,4 @@ export function ChatPanel({
       </div>
     </div>
   )
-}
+})
