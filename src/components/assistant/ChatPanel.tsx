@@ -1,11 +1,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, Microphone, PaperPlaneTilt, SpeakerHigh, SpeakerSlash, X } from '@phosphor-icons/react'
+import { Check, Microphone, PaperPlaneTilt, SpeakerHigh, SpeakerSlash, ThumbsDown, ThumbsUp, X } from '@phosphor-icons/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AssistantOrb } from './AssistantOrb'
 import { BranchResultsCard } from './BranchResultsCard'
 import { AppointmentBookingCard } from './AppointmentBookingCard'
+import { MyAppointmentsCard, type AppointmentLookup } from './MyAppointmentsCard'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import type { BranchOut } from '@/lib/api'
@@ -102,6 +103,52 @@ function TransferApprovalCard({ transfer, dark }: { transfer: PendingTransferBlo
 export interface ChatMessage {
   role: 'user' | 'assistant'
   text: string
+}
+
+function FeedbackButtons({ messageId, dark }: { messageId: number; dark: boolean }) {
+  const [choice, setChoice] = useState<'up' | 'down' | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  async function rate(value: 'up' | 'down') {
+    if (saving || choice === value) return
+    setSaving(true)
+    setChoice(value) // optimistic — this is a low-stakes rating, not worth blocking on
+    try {
+      await api.post(`/api/chat/messages/${messageId}/feedback`, { feedback: value })
+    } catch {
+      setChoice(null)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mt-1.5 flex items-center gap-1">
+      <button
+        onClick={() => rate('up')}
+        aria-label="Good response"
+        aria-pressed={choice === 'up'}
+        className={cn(
+          'grid h-6 w-6 cursor-pointer place-items-center rounded-full transition-colors',
+          choice === 'up' ? 'bg-positive/15 text-positive' : dark ? 'text-white/30 hover:text-white/60' : 'text-ink-muted/60 hover:text-ink-muted',
+        )}
+      >
+        <ThumbsUp size={12} weight={choice === 'up' ? 'fill' : 'regular'} />
+      </button>
+      <button
+        onClick={() => rate('down')}
+        aria-label="Poor response"
+        aria-pressed={choice === 'down'}
+        className={cn(
+          'grid h-6 w-6 cursor-pointer place-items-center rounded-full transition-colors',
+          choice === 'down' ? 'bg-negative/15 text-negative' : dark ? 'text-white/30 hover:text-white/60' : 'text-ink-muted/60 hover:text-ink-muted',
+        )}
+      >
+        <ThumbsDown size={12} weight={choice === 'down' ? 'fill' : 'regular'} />
+      </button>
+      {choice ? <span className={cn('text-[10px]', dark ? 'text-white/30' : 'text-ink-muted/60')}>Thanks for the feedback</span> : null}
+    </div>
+  )
 }
 
 type ChatContext = 'faq' | 'account' | 'agent_copilot'
@@ -364,6 +411,9 @@ export const ChatPanel = forwardRef<ChatPanelHandle, {
                     m.role === 'assistant' ? (
                       (() => {
                         const { cleanText, blocks } = extractVantraBlocks(m.text)
+                        const metaBlock = blocks.find((b) => b.type === 'message-meta')
+                        const messageId = metaBlock ? (metaBlock.data as { message_id: number }).message_id : undefined
+                        const isLast = i === messages.length - 1
                         return (
                           <>
                             <MarkdownMessage text={cleanText} dark={dark} />
@@ -372,8 +422,13 @@ export const ChatPanel = forwardRef<ChatPanelHandle, {
                               if (block.type === 'branches') return <BranchResultsCard key={bi} branches={block.data as BranchOut[]} dark={dark} />
                               if (block.type === 'appointment-form')
                                 return <AppointmentBookingCard key={bi} prefill={block.data as { branch_name: string; name?: string; email?: string; preferred_date?: string; preferred_time?: string; reason?: string }} dark={dark} />
+                              if (block.type === 'appointments') return <MyAppointmentsCard key={bi} appointments={block.data as AppointmentLookup[]} dark={dark} />
                               return null
                             })}
+                            {/* Only once the reply has actually finished (a real row
+                                exists to attach feedback to) — never on the message
+                                still streaming in. */}
+                            {messageId && !(streaming && isLast) ? <FeedbackButtons messageId={messageId} dark={dark} /> : null}
                           </>
                         )
                       })()

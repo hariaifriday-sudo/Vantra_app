@@ -238,10 +238,13 @@ FAQ_TOOLS: list[dict[str, Any]] = [
     ),
     _tool(
         "propose_appointment_booking",
-        "Stages an appointment-booking form, pre-filled with anything you can already tell from the "
-        "conversation — does not book anything by itself. Call as soon as the customer wants to book "
-        "or schedule a branch visit. Pass an empty string for any field you don't know; never guess. "
-        "The form itself lets them fill in or correct whatever you didn't pre-fill.",
+        "Stages a NEW appointment-booking form, pre-filled with anything you can already tell from the "
+        "conversation — does not book anything by itself. Call only when the customer wants to book a "
+        "brand new branch visit that doesn't exist yet. Do NOT call this to change the date/time of an "
+        "appointment they already booked (e.g. \"reschedule\", \"move my appointment\", \"change the "
+        "time\") — that is reschedule_appointment instead, which updates the existing one instead of "
+        "creating a duplicate. Pass an empty string for any field you don't know; never guess. The form "
+        "itself lets them fill in or correct whatever you didn't pre-fill.",
         {
             "name": {"type": "string", "description": "customer's name if they've given it; empty string otherwise"},
             "email": {"type": "string", "description": "customer's email if they've given it; empty string otherwise"},
@@ -260,12 +263,53 @@ FAQ_TOOLS: list[dict[str, Any]] = [
         {"email": {"type": "string"}, "message": {"type": "string", "description": "summary of what they need help with"}},
         ["email", "message"],
     ),
+    _tool(
+        "check_my_appointments",
+        "Looks up branch appointments already booked under an email address (via "
+        "propose_appointment_booking, in this chat or an earlier one) — not a login, just a lookup "
+        "by the email the customer gives you. Call whenever they ask about an appointment they "
+        "already booked, e.g. \"what are my upcoming appointments\". If they haven't given you an "
+        "email yet in this conversation, ask for it first rather than guessing.",
+        {"email": {"type": "string"}},
+        ["email"],
+    ),
+    _tool(
+        "reschedule_appointment",
+        "Changes the date and/or time of an appointment the customer already booked. Updates the "
+        "existing appointment in place — does NOT create a new one, so never call "
+        "propose_appointment_booking for a reschedule request. Requires the reference (e.g. "
+        "'APT-7DAC1F') from an earlier check_my_appointments call or booking confirmation in this "
+        "conversation; if you don't have it, call check_my_appointments first.",
+        {
+            "reference": {"type": "string"},
+            "preferred_date": {"type": "string", "description": "YYYY-MM-DD; empty string to leave unchanged"},
+            "preferred_time": {"type": "string", "description": "one of: 9:00 AM, 10:00 AM, 11:00 AM, 1:00 PM, 2:00 PM, 3:00 PM, 4:00 PM; empty string to leave unchanged"},
+        },
+        ["reference"],
+    ),
+    _tool(
+        "cancel_appointment",
+        "Cancels an appointment the customer already booked. Requires the reference (e.g. "
+        "'APT-7DAC1F') from an earlier check_my_appointments call or booking confirmation in this "
+        "conversation; if you don't have it, call check_my_appointments first.",
+        {"reference": {"type": "string"}},
+        ["reference"],
+    ),
 ]
 
 
-def build_faq_executor(db: Session, artifacts: dict[str, list]):
+def _format_transcript(messages: list[dict[str, str]]) -> str:
+    speaker = {"user": "Customer", "assistant": "Vantra"}
+    lines = [f"{speaker.get(m['role'], m['role'])}: {m['content']}" for m in messages if m.get("content")]
+    return "\n".join(lines)
+
+
+def build_faq_executor(db: Session, messages: list[dict[str, str]], artifacts: dict[str, list]):
     """Same artifact-recording pattern as build_executor above, but for the
-    unauthenticated public assistant — no user/account context available."""
+    unauthenticated public assistant — no user/account context available.
+    `messages` is the same role/content history handed to the model, so
+    escalate_to_human can attach the real conversation, not just the
+    one-line summary the model writes."""
 
     async def execute(name: str, args: dict[str, Any]) -> dict:
         try:
@@ -297,10 +341,12 @@ def build_faq_executor(db: Session, artifacts: dict[str, list]):
                 return {"status": "form_shown", "note": "A pre-filled booking form has been shown to the customer — tell them what you filled in and to confirm/complete the rest, don't ask them to re-type it in chat."}
 
             if name == "escalate_to_human":
+                transcript = _format_transcript(messages)
+                body = f"Summary: {args['message']}\n\n--- Full conversation ---\n{transcript}" if transcript else args["message"]
                 ticket = models.CaseTicket(
                     sender_email=args["email"],
                     subject="FAQ assistant escalation",
-                    body=args["message"],
+                    body=body,
                     department="General Support",
                     status="Needs Review",
                 )
@@ -313,6 +359,76 @@ def build_faq_executor(db: Session, artifacts: dict[str, list]):
                     "customer_care_number": branch_data.CUSTOMER_CARE_NUMBER,
                     "note": f"Tell the customer a support agent will email them at {args['email']}, and mention they can also call {branch_data.CUSTOMER_CARE_NUMBER} ({branch_data.CUSTOMER_CARE_HOURS}) for anything urgent.",
                 }
+
+            if name == "check_my_appointments":
+                rows = (
+                    db.query(models.BranchAppointment)
+                    .filter(models.BranchAppointment.email == args["email"])
+                    .order_by(models.BranchAppointment.created_at.desc())
+                    .all()
+                )
+                results = [
+                    {
+                        "reference": r.reference,
+                        "branch_name": r.branch_name,
+                        "preferred_date": r.preferred_date,
+                        "preferred_time": r.preferred_time,
+                        "status": r.status,
+                    }
+                    for r in rows
+                ]
+                artifacts["appointments"] = results
+                if not results:
+                    return {"appointments": [], "note": f"No appointments found for {args['email']} — tell the customer plainly, don't invent one."}
+                return {"appointments": results, "note": "The customer's appointments are shown to them automatically — don't re-list the details in text, just acknowledge them."}
+
+            if name == "reschedule_appointment":
+                appt = (
+                    db.query(models.BranchAppointment)
+                    .filter(models.BranchAppointment.reference == args["reference"])
+                    .first()
+                )
+                if not appt:
+                    return {"error": f"No appointment found with reference {args['reference']}."}
+                valid_times = {"9:00 AM", "10:00 AM", "11:00 AM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"}
+                new_date = (args.get("preferred_date") or "").strip()
+                new_time = (args.get("preferred_time") or "").strip()
+                if new_date:
+                    appt.preferred_date = new_date
+                if new_time and new_time in valid_times:
+                    appt.preferred_time = new_time
+                db.commit()
+                db.refresh(appt)
+                result = {
+                    "reference": appt.reference,
+                    "branch_name": appt.branch_name,
+                    "preferred_date": appt.preferred_date,
+                    "preferred_time": appt.preferred_time,
+                    "status": appt.status,
+                }
+                artifacts["appointments"] = [result]
+                return {"status": "rescheduled", "appointment": result, "note": "The updated appointment is shown to the customer automatically — don't re-list the details in text, just confirm it's rescheduled."}
+
+            if name == "cancel_appointment":
+                appt = (
+                    db.query(models.BranchAppointment)
+                    .filter(models.BranchAppointment.reference == args["reference"])
+                    .first()
+                )
+                if not appt:
+                    return {"error": f"No appointment found with reference {args['reference']}."}
+                appt.status = "Cancelled"
+                db.commit()
+                db.refresh(appt)
+                result = {
+                    "reference": appt.reference,
+                    "branch_name": appt.branch_name,
+                    "preferred_date": appt.preferred_date,
+                    "preferred_time": appt.preferred_time,
+                    "status": appt.status,
+                }
+                artifacts["appointments"] = [result]
+                return {"status": "cancelled", "appointment": result, "note": "The cancelled appointment is shown to the customer automatically — don't re-list the details in text, just confirm it's cancelled."}
 
             return {"error": f"Unknown tool '{name}'"}
         except (KeyError, TypeError, ValueError) as exc:

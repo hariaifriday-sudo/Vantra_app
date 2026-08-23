@@ -259,6 +259,7 @@ class ChatMessage(Base):
     context: Mapped[str] = mapped_column(String(32))  # faq | account | agent_copilot
     role: Mapped[str] = mapped_column(String(16))  # user | assistant
     content: Mapped[str] = mapped_column(Text)
+    feedback: Mapped[str | None] = mapped_column(String(8), nullable=True)  # up | down, assistant messages only
     created_at: Mapped[datetime] = mapped_column(default=now_utc)
 
 

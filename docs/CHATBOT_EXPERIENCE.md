@@ -15,13 +15,20 @@ mounted with a different `context` prop:
 
 | Context | Where | Authenticated? | Backend behavior |
 |---|---|---|---|
-| `faq` | `/assistant`, public | No | Tool-calling (`FAQ_TOOLS`) — branch lookup, appointment booking, escalation |
+| `faq` | `/assistant`, public | No | Tool-calling (`FAQ_TOOLS`) — branch lookup, appointment booking/lookup/reschedule/cancel, escalation |
 | `account` | Docked on every `/app/*` page | Yes | Tool-calling (`ACCOUNT_TOOLS`) — goals, transfers, payments, documents, test-data simulation, all grounded in the real logged-in customer's data |
 | `agent_copilot` | Floating orb on every `/agent/*` page | Yes | **No tool-calling** — RAG-grounded plain streaming. Every message runs a similarity search over the policy library first (`app/rag.py`), and answers cite the retrieved policy text plus the agent's real open-queue counts (AML/Fraud/KYC/cases) |
 
 One component, one visual language, one streaming pipeline — the difference
 is entirely server-side, in which system prompt and which tools (if any)
 `routers/chat.py` wires up for that context.
+
+The one deliberate exception is `/whatsapp-demo` (unlisted —
+[WHATSAPP_DEMO.md](WHATSAPP_DEMO.md)): it talks to the same `context=faq`
+endpoint, the same `FAQ_TOOLS`, and the same system prompt, but its own
+`WhatsAppDemo.tsx` page, not `ChatPanel` — kept separate on purpose so the
+WhatsApp-styled skin doesn't leak into (or get constrained by) the shared
+component.
 
 ## Streaming
 
@@ -56,10 +63,18 @@ Tools that produce this kind of data write it into a server-side
 The frontend (`extractVantraBlocks` in `ChatPanel.tsx`) strips these out of
 the displayed text and renders the matching real component instead:
 `vantra:approve-transfer` → `TransferApprovalCard`, `vantra:branches` →
-`BranchResultsCard`, `vantra:appointment-form` → `AppointmentBookingCard`.
+`BranchResultsCard`, `vantra:appointment-form` → `AppointmentBookingCard`,
+`vantra:appointments` → `MyAppointmentsCard` (used by `check_my_appointments`,
+`reschedule_appointment`, and `cancel_appointment` alike — same card, same
+block type, whether it's showing a list or a single updated row).
 The model only ever has to *decide* to call a tool and describe the result
 in words — the actual numbers/links on screen come from the database, every
 time.
+
+One more block outside that pattern: every assistant message also gets a
+`vantra:message-meta` block carrying the real `ChatMessage.id` so the
+frontend's thumbs-up/down (`FeedbackButtons`) can post feedback against the
+actual row instead of a client-generated key.
 
 ## Voice in and out
 
@@ -97,7 +112,7 @@ preamble.
 |---|---|
 | The chat UI itself | `src/components/assistant/ChatPanel.tsx` |
 | Avatar | `src/components/assistant/AssistantOrb.tsx` |
-| Inline action cards | `src/components/assistant/TransferApprovalCard` (in ChatPanel.tsx), `BranchResultsCard.tsx`, `AppointmentBookingCard.tsx` |
+| Inline action cards | `src/components/assistant/TransferApprovalCard` (in ChatPanel.tsx), `BranchResultsCard.tsx`, `AppointmentBookingCard.tsx`, `MyAppointmentsCard.tsx` |
 | Streaming endpoint + system prompts | `server/app/routers/chat.py` |
 | Account-holder tools | `server/app/chat_tools.py` (`ACCOUNT_TOOLS`, `build_executor`) |
 | FAQ tools | `server/app/chat_tools.py` (`FAQ_TOOLS`, `build_faq_executor`) |

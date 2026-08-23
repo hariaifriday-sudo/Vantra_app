@@ -45,7 +45,11 @@ If you want a completely clean slate at any point: stop the backend, delete `ser
 - Click a quick-suggestion chip (e.g. "Calculate my EMI") — it should populate and send the chat. As you send messages, the **"You might also ask"** strip below the chat should stop repeating whatever you've already asked.
 - **Branch lookup**: click **Find a branch near me** (or ask "where's a branch in Austin?") — confirm a card renders inline with a real address/phone/hours and a working **Open in Google Maps** link.
 - **Appointment booking**: ask something like *"I'm Jane Doe, jane@example.com, book me at the New York branch tomorrow at 11am for a loan question"* — confirm a booking form appears **pre-filled** from what you said (name/branch/date/time/reason), with a note that it was pre-filled. Adjust anything and click **Confirm appointment** — confirm a green "Appointment requested" confirmation with a real reference code (`APT-XXXXXX`) appears.
-- **Escalate to a human**: click **Talk to a human agent** (or the link at the bottom of the page) and give an email if asked — confirm the assistant confirms a ticket was opened and gives the customer-care phone number. Cross-check as agent: log in as Dana → **Case Inbox** → the new ticket should be there.
+- **Appointment lookup**: in the same conversation, ask *"what are my upcoming appointments?"* — confirm it lists the one you just booked (reference, branch, date/time, status) via a real card, not a "you're not logged in" deflection.
+- **Reschedule / cancel**: ask *"reschedule that to next week"* or *"cancel my appointment"* — confirm the **same reference** updates in place (new date, or `Cancelled` status) rather than a second appointment appearing. See [docs/FAQ_ASSISTANT.md](docs/FAQ_ASSISTANT.md) for why a duplicate can't happen here even if the model reaches for the wrong tool.
+- **Message feedback**: hover an assistant reply — confirm thumbs-up/down icons appear and clicking one highlights (persists across reload).
+- **Escalate to a human**: click **Talk to a human agent** (or the link at the bottom of the page) and give an email if asked — confirm the assistant confirms a ticket was opened and gives the customer-care phone number. Cross-check as agent: log in as Dana → **Case Inbox** → the new ticket should be there, and its body should include the full conversation transcript, not just a one-line summary.
+- **Email me this**: on a branch result card, click **Email me this** — confirm a success state (this is a simulated send, logged to the audit trail, not a real email).
 - **FAQ search**: switch to the FAQ tab, type "freeze" in the search box — confirm it filters to the matching question, and expanding it shows a real written answer (not a placeholder).
 - **Persistence**: reload the page — the conversation you just had should still be there, not reset.
 
@@ -165,7 +169,31 @@ This is the second flagship flow.
 
 ---
 
-## 4. Cross-cutting checks
+## 4. Internal/testing tools (unlisted, direct URL)
+
+Neither of these is linked from any nav — reach them by typing the URL directly.
+
+### 4.1 WhatsApp Demo — `/whatsapp-demo`
+See [docs/WHATSAPP_DEMO.md](docs/WHATSAPP_DEMO.md) for what's real vs. styling.
+- No login required. Confirm the WhatsApp-lookalike header/bubbles render, and the "UI DEMO... not affiliated with WhatsApp/Meta" banner is visible.
+- Repeat a few of the §1.2 FAQ assistant checks here (branch lookup, appointment booking, appointment lookup/reschedule) — same backend, same tools, should behave identically.
+- **Voice**: click the mic icon — if your browser supports it, confirm a real permission prompt/listening state (this page has its own Web Speech wiring, separate from the main assistant's).
+- **Persistence**: reload the page — confirm the full conversation (including any appointment you booked) survives, the same as `/assistant`.
+
+### 4.2 DB Admin Console — `/db-admin`
+Requires agent login (log in as Dana first via `/login`, then navigate here directly). See [docs/DB_ADMIN.md](docs/DB_ADMIN.md) for the full design.
+- Confirm the sidebar lists every table with a live row count; filter by typing part of a table name.
+- Select a table, confirm the grid loads with sortable columns (click a header to sort) and pagination controls.
+- **Edit a row**: click the pencil icon, change a field, save — confirm the grid reflects the change immediately.
+- **Delete a row**: click the trash icon, confirm the confirmation dialog, confirm the row disappears.
+- **Add a row**: click **Add row**, fill in the fields, save — confirm it appears in the grid.
+- **SQL console**: type a plain-English request (e.g. *"show the 5 most recent audit log entries"*), click **Generate SQL** — confirm a real SQLite statement appears in the editable box with a one-sentence note. Click **Run SQL** — for a `SELECT`, confirm results render as a table below.
+- **Destructive confirmation**: generate or type an `UPDATE`/`DELETE` statement, click **Run SQL** — confirm it does *not* run immediately, instead showing a "this changes or removes data, run it?" prompt requiring a second click.
+- **Bad request handling**: ask for something referencing a column/table that doesn't exist (e.g. a deliberate typo) — confirm you get a clear error explaining the mismatch, not a query that silently returns nothing.
+
+---
+
+## 5. Cross-cutting checks
 
 - **Roles are enforced**: while logged in as Maren, manually navigate to `/agent` — should redirect to `/app` (not show agent data). Same in reverse for Dana → `/agent`.
 - **Logout clears session**: after logging out, refreshing `/app` should redirect to `/login`, not show cached data.
@@ -174,7 +202,7 @@ This is the second flagship flow.
 
 ---
 
-## 5. API-level testing (optional, for backend verification without the UI)
+## 6. API-level testing (optional, for backend verification without the UI)
 
 All endpoints require `Authorization: Bearer <token>` except `/api/auth/*` and `/api/health`.
 
@@ -217,7 +245,7 @@ A full endpoint list is visible at `http://localhost:8000/docs` (FastAPI's auto-
 
 ---
 
-## 6. Known limitations to expect, not bugs
+## 7. Known limitations to expect, not bugs
 
 - The AML page's **Anomaly Rate Trend**, **Flag Rate by Category**, and **Rule Coverage by Framework** charts are illustrative sample data — only the **Open Alerts** list and the Run Sweep flow are computed live.
 - OCR quality depends on the input photo — a blurry or low-contrast scan will legitimately produce lower confidence scores or missing fields. That's the confidence system working correctly, not a bug.

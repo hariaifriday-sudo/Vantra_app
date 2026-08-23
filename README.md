@@ -80,6 +80,11 @@ what's real vs. simplified, and how to test it:
   known-bad-merchant feedback loop
 - [Chatbot Experience](docs/CHATBOT_EXPERIENCE.md) — the shared chat
   architecture behind all three assistants
+- [WhatsApp Demo](docs/WHATSAPP_DEMO.md) — a WhatsApp-styled skin on the same
+  FAQ assistant, for demoing the "message the bank" experience with no real
+  WhatsApp Business API integration to host
+- [DB Admin Console](docs/DB_ADMIN.md) — a Toad-like tool to browse/edit/
+  delete any table and run LLM-generated SQL, for testing
 
 ## What's real vs. illustrative
 
@@ -156,11 +161,33 @@ not just describe what to do:
   server-side, never hallucinated), stages a branch-appointment booking form
   pre-filled from whatever's already in the conversation (name, branch,
   date/time, reason — inferred from natural language like "tomorrow
-  afternoon"), and escalates to a human by opening a real support ticket in
-  the agent's Case Inbox. The FAQ tab has a real search box and written
-  Q&A content (not just category counts), a "you might also ask" strip that
-  tracks what's actually been asked, and the conversation persists across a
-  page reload.
+  afternoon"), looks up/reschedules/cancels an appointment already booked
+  under an email (`check_my_appointments`, `reschedule_appointment`,
+  `cancel_appointment` — a same-email/branch resubmission is also deduped
+  server-side into an update instead of a duplicate row, as a backstop for
+  when the model reaches for the wrong tool), and escalates to a human by
+  opening a real support ticket (with the full conversation transcript
+  attached, not just a one-line summary) in the agent's Case Inbox. The FAQ
+  tab has a real search box and written Q&A content (not just category
+  counts), a "you might also ask" strip that tracks what's actually been
+  asked, and the conversation persists across a page reload. Every assistant
+  reply carries a real thumbs-up/down (`POST /api/chat/messages/{id}/
+  feedback`), and a branch result card has an **Email me this** button
+  (simulated send, logged to the audit trail — no SMTP wired up in this
+  demo).
+- **WhatsApp-styled demo** (`/whatsapp-demo`, unlisted — see
+  [docs/WHATSAPP_DEMO.md](docs/WHATSAPP_DEMO.md)): the same FAQ backend and
+  tools behind a WhatsApp-lookalike chat UI, for demoing the "message the
+  bank" experience without standing up a real WhatsApp Business API
+  integration. Its own voice I/O wiring and its own `localStorage`
+  persistence, deliberately kept separate from `ChatPanel` per how this
+  demo page is meant to be shown (a standalone link, not part of the main
+  site).
+- **DB Admin console** (`/db-admin`, unlisted, agent-login gated — see
+  [docs/DB_ADMIN.md](docs/DB_ADMIN.md)): a Toad-like tool for testing —
+  browse/edit/delete any row in any table, or describe a request in plain
+  English and have an LLM draft the SQLite statement for you to review
+  before running it.
 
 Illustrative only (no dedicated backend model yet): the AML page's anomaly
 trend / flag-rate / framework-coverage charts still render from static

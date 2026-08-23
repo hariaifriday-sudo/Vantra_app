@@ -1,8 +1,10 @@
 # FAQ Assistant
 
 The public-facing AI assistant at `/assistant` — no login required. Answers
-general banking questions, and can take three real actions: find a branch,
-book an appointment, and escalate to a human agent.
+general banking questions, and can take real actions: find a branch, book,
+look up, reschedule, or cancel an appointment, and escalate to a human
+agent. The same backend and tools also power a WhatsApp-styled standalone
+demo at `/whatsapp-demo` — see [WHATSAPP_DEMO.md](WHATSAPP_DEMO.md).
 
 ## Where to find it
 
@@ -43,12 +45,57 @@ branch list (`GET /api/public/branches`) for its dropdown and posts to
 `POST /api/public/appointments` on submit, which creates a real
 `BranchAppointment` row and returns a reference code (`APT-XXXXXX`).
 
+### Look up, reschedule, and cancel appointments (`check_my_appointments`, `reschedule_appointment`, `cancel_appointment`)
+`check_my_appointments` looks up every `BranchAppointment` under an email
+address — not a login, just a lookup by whatever email the customer gives in
+chat — and renders them inline via `MyAppointmentsCard`
+(`src/components/assistant/MyAppointmentsCard.tsx`). If none are found, the
+tool result explicitly tells the model not to invent one.
+
+`reschedule_appointment` and `cancel_appointment` take a `reference` (e.g.
+`APT-7DAC1F` — the model picks this up from an earlier `check_my_appointments`
+result or booking confirmation already in the conversation) and update the
+row directly, re-rendering the same card with the new date/time or
+`Cancelled` status. The system prompt is explicit that these — not
+`propose_appointment_booking` — are the right tool for a reschedule/cancel
+request, and that the model should call `check_my_appointments` first if it
+doesn't already have the reference in context.
+
+That said, tool selection isn't guaranteed on a small/fast model — testing
+showed the model sometimes still reached for `propose_appointment_booking`
+on a reschedule request even with the reference in view, which used to
+create a **second** appointment instead of changing the first. As a
+backstop independent of which tool gets called, `POST /api/public/
+appointments` (`server/app/routers/public.py`) now checks for an existing
+`Requested` appointment at the same branch/email before inserting — if one
+exists, it updates that row (same reference, new date/time) instead of
+creating a duplicate; a different branch still creates a genuinely separate
+appointment. This means the "no duplicate" guarantee holds regardless of
+whether the model correctly used the reschedule tool.
+
 ### Escalate to a human (`escalate_to_human`)
 Opens a real support ticket — not a canned "please call us" reply. Requires
 an email and a summary; creates a `CaseTicket` (`department="General
 Support"`, `status="Needs Review"`) that shows up in the agent's Case Inbox
-like any other incoming email. The reply also surfaces the customer-care
-phone number for anything urgent.
+like any other incoming email. The ticket body includes the **full
+conversation transcript** (`_format_transcript` in `chat_tools.py`), not
+just the one-line summary the model writes, so the agent picking it up sees
+everything the customer already said. The reply also surfaces the
+customer-care phone number for anything urgent.
+
+### Message feedback
+Every assistant reply gets a real thumbs-up/down (`FeedbackButtons` in
+`ChatPanel.tsx`) — the model tags its own message with a `vantra:message-meta`
+block carrying the real `ChatMessage.id`, and a click posts to `POST /api/
+chat/messages/{id}/feedback`, persisted on the row (`ChatMessage.feedback`,
+`"up"` or `"down"`).
+
+### Email me this (branch results)
+`BranchResultsCard` has an **Email me this** button per branch
+(`EmailBranchButton`) that posts to `POST /api/public/branches/email`. No
+SMTP is wired up in this demo — same spirit as the Case Inbox's "Simulate
+email" button — it records a real `AuditLog` entry of the send rather than
+delivering actual mail.
 
 ### FAQ tab — search + real content
 Unlike a typical placeholder FAQ list, the categories expand into actual

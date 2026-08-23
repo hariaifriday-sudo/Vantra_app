@@ -436,12 +436,18 @@ class ChatMessageIn(BaseModel):
 
 
 class ChatMessageOut(BaseModel):
+    id: int
     role: str
     content: str
+    feedback: Optional[str] = None
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class MessageFeedbackRequest(BaseModel):
+    feedback: Literal["up", "down"]
 
 
 # ---- Public assistant (branches, appointments) ----
@@ -475,6 +481,11 @@ class AppointmentOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class BranchEmailRequest(BaseModel):
+    email: EmailStr
+    branch_name: str
 
 
 # ---- Audit ----

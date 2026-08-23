@@ -4,6 +4,8 @@ import Homepage from '@/pages/public/Homepage'
 import Assistant from '@/pages/public/Assistant'
 import Login from '@/pages/public/Login'
 import Trust from '@/pages/public/Trust'
+import WhatsAppDemo from '@/pages/public/WhatsAppDemo'
+import DbAdmin from '@/pages/public/DbAdmin'
 import { AccountLayout } from '@/components/layout/AccountLayout'
 import Dashboard from '@/pages/account/Dashboard'
 import Kyc from '@/pages/account/Kyc'
@@ -28,6 +30,19 @@ export default function App() {
           <Route path="/assistant" element={<Assistant />} />
           <Route path="/login" element={<Login />} />
           <Route path="/trust" element={<Trust />} />
+          {/* Deliberately not linked from any nav — reachable only by direct
+              URL, so the WhatsApp-style demo doesn't clutter the main site. */}
+          <Route path="/whatsapp-demo" element={<WhatsAppDemo />} />
+          {/* Same pattern — unlisted, direct-URL only. Gated behind agent
+              login since it's raw DB read/write/SQL access for testing. */}
+          <Route
+            path="/db-admin"
+            element={
+              <RequireRole role="agent">
+                <DbAdmin />
+              </RequireRole>
+            }
+          />
 
           <Route
             path="/app"

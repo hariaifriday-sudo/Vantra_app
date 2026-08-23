@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -31,9 +31,20 @@ hours/Google-Maps-link automatically — don't re-type them yourself. propose_ap
 stages a booking form for the customer to fill in — call it as soon as they want to book a visit.
 Pre-fill whatever you can already tell from the conversation (name, email, branch, date, time,
 reason) as arguments; pass an empty string for anything you don't know rather than asking for it
-first — the form itself lets them fill in or fix whatever's missing. escalate_to_human opens a real
-support ticket — use it when they explicitly want a human, or when their request is genuinely
-outside what you can do unauthenticated; you'll need their email first.
+first — the form itself lets them fill in or fix whatever's missing. check_my_appointments looks up
+appointments already booked under an email — use it whenever they ask about an existing booking
+(e.g. "what are my upcoming appointments"); ask for their email first if they haven't given it in
+this conversation, never guess it or assume "no appointments" without actually calling the tool.
+For a reschedule or cancellation request about an appointment they already have, use
+reschedule_appointment / cancel_appointment — never propose_appointment_booking, that creates a
+brand new appointment instead of changing the one they're asking about, even if they never gave you
+a reference number. These need the reference: if you don't already see one in this conversation
+(e.g. from an earlier booking confirmation or appointment card), call check_my_appointments with
+their email FIRST to find it — ask for their email if you don't have it — then reschedule/cancel.
+Only fall back to propose_appointment_booking if check_my_appointments finds no matching
+appointment at all.
+escalate_to_human opens a real support ticket — use it when they explicitly want a human, or when
+their request is genuinely outside what you can do unauthenticated; you'll need their email first.
 
 Customer care line: {branch_data.CUSTOMER_CARE_NUMBER} ({branch_data.CUSTOMER_CARE_HOURS}). Give
 this out when a human wants to call instead of chat, when escalating, or when you can't resolve
@@ -258,8 +269,12 @@ async def chat_stream(
                     full_reply += block
                     yield block
             elif use_tools:  # context == "faq"
-                faq_artifacts: dict[str, object] = {"branches": [], "appointment_form": None}
-                executor = build_faq_executor(session, faq_artifacts)
+                faq_artifacts: dict[str, object] = {"branches": [], "appointment_form": None, "appointments": []}
+                # The escalate_to_human tool needs the real conversation, not
+                # just the one-line summary the model chooses to write — an
+                # agent picking up the resulting ticket should see everything
+                # the customer already said, not a paraphrase.
+                executor = build_faq_executor(session, messages, faq_artifacts)
                 async for chunk in stream_chat_with_tools(messages, system_prompt, FAQ_TOOLS, executor):
                     full_reply += chunk
                     yield chunk
@@ -272,13 +287,24 @@ async def chat_stream(
                     block = "\n\n```vantra:appointment-form\n" + json.dumps(faq_artifacts["appointment_form"]) + "\n```"
                     full_reply += block
                     yield block
+                if faq_artifacts["appointments"]:
+                    block = "\n\n```vantra:appointments\n" + json.dumps(faq_artifacts["appointments"]) + "\n```"
+                    full_reply += block
+                    yield block
             else:
                 async for chunk in stream_chat(messages, system_prompt):
                     full_reply += chunk
                     yield chunk
 
-            session.add(models.ChatMessage(user_id=user_id, session_key=session_key, context=context, role="assistant", content=full_reply))
+            assistant_message = models.ChatMessage(user_id=user_id, session_key=session_key, context=context, role="assistant", content=full_reply)
+            session.add(assistant_message)
             session.commit()
+            session.refresh(assistant_message)
+            # A trailing metadata block, same pattern as the artifact blocks
+            # above — gives the frontend the real row id so feedback
+            # (thumbs up/down) attaches to an actual message, not a guess.
+            meta_block = "\n\n```vantra:message-meta\n" + json.dumps({"message_id": assistant_message.id}) + "\n```"
+            yield meta_block
         finally:
             session.close()
 
@@ -293,3 +319,17 @@ def chat_history(session_key: str, db: Session = Depends(get_db)):
         .order_by(models.ChatMessage.created_at.asc())
         .all()
     )
+
+
+@router.post("/messages/{message_id}/feedback", response_model=schemas.ChatMessageOut)
+def submit_feedback(message_id: int, payload: schemas.MessageFeedbackRequest, db: Session = Depends(get_db)):
+    """Thumbs up/down on an assistant reply. Unauthenticated (the public FAQ
+    assistant has no login), so this is intentionally not scoped to a user —
+    anyone holding a real message id from their own session can rate it."""
+    message = db.get(models.ChatMessage, message_id)
+    if not message or message.role != "assistant":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Message not found")
+    message.feedback = payload.feedback
+    db.commit()
+    db.refresh(message)
+    return message
